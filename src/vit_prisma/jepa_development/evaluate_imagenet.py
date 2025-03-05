@@ -21,6 +21,9 @@ import torch.nn.functional as F
 
 from torchvision.datasets import ImageFolder
 
+# # train sae
+from vit_prisma.sae.train_sae import VisionSAETrainer
+from vit_prisma.sae.config import VisionModelSAERunnerConfig
 
 
 DEVICE = 'cuda'
@@ -160,10 +163,6 @@ def evaluate_imagenet_probe(encoder, val_loader, probe, device='cuda', use_bfloa
                 # # try random features
                 # features = torch.randn(16, 1568, 1024).to(DEVICE)
 
-                print("features shape:", features.shape)
-                print(f"Feature stats - mean: {features.mean().item()}, std: {features.std().item()}")
-                print(f"Feature min: {features.min().item()}, max: {features.max().item()}")
-
 
 
                 output = probe(features)
@@ -193,7 +192,6 @@ def load_attentive_probe(encoder, probe_path):
 
 
     checkpoint = torch.load(probe_path, map_location=DEVICE)
-    print(checkpoint.keys())
     checkpoint = checkpoint['classifier']
 
 
@@ -202,7 +200,6 @@ def load_attentive_probe(encoder, probe_path):
     for k, v in checkpoint.items():
         name = k.replace('module.', '')  # remove 'module.' prefix if it exists
         new_state_dict[name] = v
-        print(v.mean())
 
     try:
         embed_dim = encoder.embed_dim
@@ -276,7 +273,7 @@ def load_model(model_name, path):
     encoder.eval()
     return encoder
 
-    
+
 
 
 
@@ -296,6 +293,9 @@ classifier_model_library = { # model_name: (model_path, probe_path)
 
 }
 
+sae_cfg = VisionModelSAERunnerConfig().load_config('jepa_l_config.json')
+
+
 model_name = 'vjepa_v1_vit_large_patch16'
 
 model_path, probe_path = classifier_model_library[model_name]
@@ -308,22 +308,25 @@ if encoder.cfg.video_num_frames > 1:
         return (input)
 encoder.register_forward_pre_hook(forward_prehook)
 
-encoder = encoder.half().to(DEVICE)
+encoder = encoder.to(DEVICE)
+
+
 
 classifier = load_attentive_probe(encoder, probe_path)
 
 data = {}
 train_data_path =  "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train"
+val_data_path = "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val"
 train_data = ImageFolder(root=train_data_path, transform=transform)
-# val_data = ImageFolder(root=val_data_path, transform=transform)
-
-# # train sae
-# from vit_prisma.sae.train_sae import VisionSAETrainer
-# trainer = VisionSAETrainer(cfg, model, train_dataset, val_dataset)
+val_data = ImageFolder(root=val_data_path, transform=transform)
 
 
-val_loader = DataLoader(train_data, batch_size=16, shuffle=True, num_workers=4)
+trainer = VisionSAETrainer(sae_cfg, encoder, train_data, val_data)
 
-top1_acc, top5_acc = evaluate_imagenet_probe(encoder, val_loader, classifier)
-print(f'Top-1 Accuracy: {top1_acc:.2f}')
-print(f'Top-5 Accuracy: {top5_acc:.2f}')
+trainer.run()
+
+# val_loader = DataLoader(train_data, batch_size=16, shuffle=True, num_workers=4)
+
+# top1_acc, top5_acc = evaluate_imagenet_probe(encoder, val_loader, classifier)
+# print(f'Top-1 Accuracy: {top1_acc:.2f}')
+# print(f'Top-5 Accuracy: {top5_acc:.2f}')

@@ -1,0 +1,71 @@
+{
+    "model_class_name": "HookedViT",
+    "model_name": "vjepa_v1_vit_large_patch16",
+    "model_path": "/path/to/your/jepa/model.pth.tar",
+    "hook_point_layer": 23,
+    "layer_subtype": "hook_resid_post",
+    "hook_point_head_index": null,
+    "context_size": 1568,
+    "use_cached_activations": false,
+    "use_patches_only": false,
+    "cached_activations_path": "activations/jepa/vit-large-patch16/blocks.12.hook_resid_post",
+    "image_size": 224,
+    "architecture": "vanilla",
+    
+    "b_dec_init_method": "geometric_median",
+    "expansion_factor": 128,
+    "from_pretrained_path": null,
+    
+    "_device": "cuda",
+    "seed": 42,
+    "_dtype": "torch.float32",
+    
+    "d_in": 1024,
+    "activation_fn_str": "relu",
+    "activation_fn_kwargs": {},
+    "cls_token_only": false,
+    
+    "max_grad_norm": 1.0,
+    "initialization_method": "encoder_transpose_decoder",
+    "normalize_activations": null,
+    
+    "is_training": true,
+    
+    "n_batches_in_buffer": 20,
+    "store_batch_size": 32,
+    "num_workers": 16,
+    
+    "num_epochs": 1,
+    
+    "verbose": false,
+    
+    "l1_coefficient": 0.00002,
+    "lp_norm": 1,
+    "lr": 0.001,
+    "lr_scheduler_name": "cosineannealingwarmup",
+    "lr_warm_up_steps": 500,
+    
+    "train_batch_size": 512,
+    
+    "min_l0": null,
+    "min_explained_variance": null,
+    
+    "dataset_name": "imagenet1k",
+    "dataset_path": "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets",
+    "dataset_train_path": "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train",
+    "dataset_val_path": "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val",
+    
+    "use_ghost_grads": false,
+    "feature_sampling_window": 1000,
+    "dead_feature_window": 5000,
+    "dead_feature_threshold": 1e-8,
+    
+    "log_to_wandb": true,
+    "wandb_project": "jepa_vit_large_patch16_sae",
+    "wandb_entity": null,
+    "wandb_log_frequency": 10,
+    
+    "n_validation_runs": 100,
+    "n_checkpoints": 10,
+    "checkpoint_path": "/network/scratch/s/sonia.joseph/sae_checkpoints/jepa_vit_large"
+}
