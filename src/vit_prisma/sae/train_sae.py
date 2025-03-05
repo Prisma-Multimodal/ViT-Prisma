@@ -58,8 +58,8 @@ def wandb_log_suffix(cfg: Any, hyperparams: Any):
 
 
 class VisionSAETrainer:
-    def __init__(self, cfg: 
-        VisionModelSAERunnerConfig,
+    def __init__(self, 
+        cfg: VisionModelSAERunnerConfig,
         model: HookedViT,
         train_dataset: torch.utils.data.Dataset,
         val_dataset: torch.utils.data.Dataset,
@@ -87,7 +87,7 @@ class VisionSAETrainer:
         self.activations_store = self.initialize_activations_store(
             dataset, eval_dataset
         )
-        
+
         if not self.cfg.wandb_project:
             self.cfg.wandb_project = (
                 self.cfg.model_name.replace("/", "-")
