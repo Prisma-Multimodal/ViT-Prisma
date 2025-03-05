@@ -123,7 +123,7 @@ def evaluate_imagenet_probe(encoder, val_loader, probe, device='cuda', use_bfloa
     top1 = AverageMeter()
     top5 = AverageMeter()
 
-    MAX = 10
+    MAX = 100
     count = 0
     
     for name, param in classifier.named_parameters():
@@ -271,14 +271,6 @@ def load_model(model_name, path):
     encoder.eval()
     return encoder
 
-# def load_hooked_model_eval(model_name = 'vjepa_v1_vit_huge_patch16_224'):
-#     # Load hooked model
-
-#     hooked_encoder = load_hooked_model(
-#         model_name)
-#     hooked_encoder.to(DEVICE)
-#     hooked_encoder.eval()
-#     return hooked_encoder
 
 
 normalization = ((0.485, 0.456, 0.406),
@@ -297,22 +289,28 @@ classifier_model_library = { # model_name: (model_path, probe_path)
 
 }
 
-model_name = 'vjepa_v1_vit_huge_patch16_224'
+model_name = 'vjepa_v1_vit_large_patch16'
 
 model_path, probe_path = classifier_model_library[model_name]
-encoder = load_model(model_name, model_path)
+encoder = load_hooked_model(model_name, local_path = model_path, pretrained=False)
+
 classifier = load_attentive_probe(encoder, probe_path)
 
 data = {}
 train_data_path =  "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train"
 train_data = ImageFolder(root=train_data_path, transform=transform)
+val_data = ImageFolder(root=val_dat_path, transform=transform)
 
-for i in range(10):
-    print(train_data.samples[i])
+# # train sae
+# from vit_prisma.sae.train_sae import VisionSAETrainer
+# trainer = VisionSAETrainer(cfg, model, train_dataset, val_dataset)
+
+# for i in range(10):
+#     print(train_data.samples[i])
 
 # data['imagenet-train']= load_imagenet(preprocess_transform=transform, dataset_path=dataset_path, dataset_type='imagenet1k-val')
-val_loader = DataLoader(train_data, batch_size=16, shuffle=False, num_workers=4)
+# val_loader = DataLoader(train_data, batch_size=16, shuffle=True, num_workers=4)
 
-top1_acc, top5_acc = evaluate_imagenet_probe(encoder, val_loader, classifier)
+top1_acc, top5_acc = load_hooked_model_eval(encoder, val_loader, classifier)
 print(f'Top-1 Accuracy: {top1_acc:.2f}')
 print(f'Top-5 Accuracy: {top5_acc:.2f}')

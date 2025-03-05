@@ -18,6 +18,8 @@ from vit_prisma.utils.enums import ModelType
 
 import torch.nn as nn
 
+import os
+
 # Import configuration dictionaries - these are just static data
 from vit_prisma.models.model_config_registry import (
     ModelCategory,
@@ -241,6 +243,52 @@ def load_weights(
 
     return full_state_dict
 
+def load_state_dict_from_local(local_path: str, device: str = 'cuda') -> dict:
+    """
+    Load a state dictionary from a local checkpoint file.
+    
+    Args:
+        local_path: Path to the local checkpoint file
+        device: Device to load the checkpoint on
+        
+    Returns:
+        dict: State dictionary loaded from the checkpoint
+    """
+    if not os.path.exists(local_path):
+        raise FileNotFoundError(f"No checkpoint file found at {local_path}")
+    
+    logging.info(f"Loading state dict from local path: {local_path}")
+    # Handle special formats
+    if model_format == 'vjepa' or (model_format is None and 'jepa' in local_path.lower()):
+        return _load_vjepa_weights(local_path, device=device)
+    
+    checkpoint = torch.load(
+        local_path,
+        map_location=torch.device(device),
+        weights_only=False,
+    )
+    
+    # Handle different checkpoint formats
+    if "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
+    elif "state_dict" in checkpoint:
+        state_dict = checkpoint["state_dict"]
+    elif isinstance(checkpoint, dict) and all(
+        k.startswith("blocks.") or k in ["embed.proj.weight", "embed.proj.bias", "head.W_H", "head.b_H", "ln_final.w", "ln_final.b", "cls_token"] 
+        for k in list(checkpoint.keys())[:5]  # Check just the first few keys
+    ):
+        # Direct state dict
+        state_dict = checkpoint
+    else:
+        raise ValueError(
+            f"Unsupported checkpoint format in {local_path}. Expected 'model_state_dict' or 'state_dict' key, "
+            "or a dictionary containing model parameters."
+        )
+    
+    
+    return state_dict
+
+
 def load_hooked_model(
     model_name: str,
     model_class: Type = None,
@@ -254,6 +302,9 @@ def load_hooked_model(
     refactor_factored_attn_matrices: bool = False,
     move_to_device: bool = True,
     use_attn_result: bool = False,
+    local_config: str = None,
+    local_path: str = None,
+
     **kwargs
 ) -> Any:
     """
@@ -273,6 +324,17 @@ def load_hooked_model(
     Returns:
         Loaded model
     """
+    if local_path is not None and pretrained:
+        raise ValueError(
+            "Cannot specify both local_path and pretrained=True. "
+            "Set pretrained=False when loading from a local path."
+        )
+    if local_config is not None and pretrained:
+        raise ValueError(
+            "Cannot specify both local_config and pretrained=True. "
+            "Set pretrained=False when loading from a local config."
+        )
+
     assert not (
             kwargs.get("load_in_8bit", False)
             or kwargs.get("load_in_4bit", False)
@@ -297,7 +359,11 @@ def load_hooked_model(
 
     model_name = check_model_name(model_name)
 
-    config = load_config(model_name, model_type, **kwargs)
+
+    if pretrained:
+        config = load_config(model_name, model_type, **kwargs)
+    elif local_config is not None:
+        config = local_config
     
     if model_class is None:
         if model_type == ModelType.VISION:
@@ -313,6 +379,9 @@ def load_hooked_model(
     # Load weights if requested
     if pretrained:
         state_dict = load_weights(model, model_name, model_type, dtype, **kwargs)
+    elif local_path is not None:
+        state_dict = load_state_dict_from_local(local_path)
+
 
     model.load_and_process_state_dict(
                 state_dict,
@@ -746,12 +815,12 @@ def _load_vivit_weights(model_name, dtype, **kwargs):
         param.requires_grad = False
     return model.state_dict()
 
-def _load_vjepa_weights(model_name, **kwargs):
+def _load_vjepa_weights(local_path, **kwargs):
     """Load weights from a VJEPA model."""
     # hardcoded for now (test version)
 
-    path = '/network/scratch/s/sonia.joseph/jepa_models/github_models/vit-l-16/vitl16.pth.tar'
-    model = torch.load(path)
+    # path = '/network/scratch/s/sonia.joseph/jepa_models/github_models/vit-l-16/vitl16.pth.tar'
+    model = torch.load(local_path)
 
     encoder_dict = model['target_encoder']
     new_state_dict = {k.replace('module.', ''): v for k, v in encoder_dict.items()}
