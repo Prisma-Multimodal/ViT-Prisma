@@ -126,13 +126,6 @@ def evaluate_imagenet_probe(encoder, val_loader, probe, device='cuda', use_bfloa
     MAX = 100
     count = 0
     
-    for name, param in classifier.named_parameters():
-        if "query_tokens" in name:
-            print(f"{name}: mean={param.data.mean().item()}, std={param.data.std().item()}")
-
-    for name, param in classifier.named_parameters():
-        print(f"{name}: mean={param.data.mean().item()}, std={param.data.std().item()}")
-
    
 
     with torch.no_grad():
@@ -142,6 +135,8 @@ def evaluate_imagenet_probe(encoder, val_loader, probe, device='cuda', use_bfloa
 
                 images = images.to(DEVICE)
                 target = target.to(DEVICE)
+
+            
 
                 if i == 0:
                     for j in range(16):
@@ -209,7 +204,19 @@ def load_attentive_probe(encoder, probe_path):
         new_state_dict[name] = v
         print(v.mean())
 
-    classifier = AttentiveClassifier(embed_dim=encoder.embed_dim ,num_heads = encoder.num_heads, depth=1, num_classes=1000).to(DEVICE)
+    try:
+        embed_dim = encoder.embed_dim
+    except:
+        embed_dim = encoder.cfg.d_model
+    
+    try:
+        num_heads = encoder.num_heads
+    except:
+        num_heads = encoder.cfg.n_heads
+
+
+
+    classifier = AttentiveClassifier(embed_dim= embed_dim ,num_heads = num_heads, depth=1, num_classes=1000).to(DEVICE)
 
 
     classifier.load_state_dict(new_state_dict, strict=True)
@@ -266,10 +273,10 @@ def load_model(model_name, path):
     for module in encoder.modules():
         if isinstance(module, torch.nn.BatchNorm2d) or isinstance(module, torch.nn.LayerNorm):
             module.eval()
-
-
     encoder.eval()
     return encoder
+
+    
 
 
 
@@ -294,23 +301,29 @@ model_name = 'vjepa_v1_vit_large_patch16'
 model_path, probe_path = classifier_model_library[model_name]
 encoder = load_hooked_model(model_name, local_path = model_path, pretrained=False)
 
+if encoder.cfg.video_num_frames > 1:
+    def forward_prehook(module, input):
+        input = input[0]  # [B, C, H, W]
+        input = input.unsqueeze(2).repeat(1, 1, encoder.cfg.video_num_frames, 1, 1)
+        return (input)
+encoder.register_forward_pre_hook(forward_prehook)
+
+encoder = encoder.half().to(DEVICE)
+
 classifier = load_attentive_probe(encoder, probe_path)
 
 data = {}
 train_data_path =  "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train"
 train_data = ImageFolder(root=train_data_path, transform=transform)
-val_data = ImageFolder(root=val_dat_path, transform=transform)
+# val_data = ImageFolder(root=val_data_path, transform=transform)
 
 # # train sae
 # from vit_prisma.sae.train_sae import VisionSAETrainer
 # trainer = VisionSAETrainer(cfg, model, train_dataset, val_dataset)
 
-# for i in range(10):
-#     print(train_data.samples[i])
 
-# data['imagenet-train']= load_imagenet(preprocess_transform=transform, dataset_path=dataset_path, dataset_type='imagenet1k-val')
-# val_loader = DataLoader(train_data, batch_size=16, shuffle=True, num_workers=4)
+val_loader = DataLoader(train_data, batch_size=16, shuffle=True, num_workers=4)
 
-top1_acc, top5_acc = load_hooked_model_eval(encoder, val_loader, classifier)
+top1_acc, top5_acc = evaluate_imagenet_probe(encoder, val_loader, classifier)
 print(f'Top-1 Accuracy: {top1_acc:.2f}')
 print(f'Top-5 Accuracy: {top5_acc:.2f}')
