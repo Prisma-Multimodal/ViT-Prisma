@@ -58,7 +58,12 @@ def wandb_log_suffix(cfg: Any, hyperparams: Any):
 
 
 class VisionSAETrainer:
-    def __init__(self, cfg: VisionModelSAERunnerConfig):
+    def __init__(self, 
+        cfg: VisionModelSAERunnerConfig,
+        model: HookedViT,
+        train_dataset: torch.utils.data.Dataset,
+        val_dataset: torch.utils.data.Dataset,
+    ):
         self.cfg = cfg
 
         self.set_default_attributes()  # For backward compatability
@@ -76,12 +81,13 @@ class VisionSAETrainer:
             raise ValueError(f"Loading of {self.cfg.architecture} not supported")
 
 
-        dataset, eval_dataset = VisionSAETrainer.load_dataset(self.cfg)
-        self.dataset = dataset
-        self.eval_dataset = eval_dataset
+        # dataset, eval_dataset = VisionSAETrainer.load_dataset(self.cfg)
+        self.dataset = train_dataset
+        self.eval_dataset = val_dataset
         self.activations_store = self.initialize_activations_store(
             dataset, eval_dataset
         )
+
         if not self.cfg.wandb_project:
             self.cfg.wandb_project = (
                 self.cfg.model_name.replace("/", "-")
@@ -143,73 +149,73 @@ class VisionSAETrainer:
             num_workers=self.cfg.num_workers,
         )
     
-    @staticmethod
-    def load_dataset(cfg):
+    # @staticmethod
+    # def load_dataset(cfg):
 
-        from vit_prisma.transforms.model_transforms import (
-            get_model_transforms,
-        )
+    #     from vit_prisma.transforms.model_transforms import (
+    #         get_model_transforms,
+    #     )
                 
-        data_transforms = get_model_transforms(cfg.model_name)
+    #     data_transforms = get_model_transforms(cfg.model_name)
 
-        if cfg.dataset_name == "imagenet1k":
-            (
-                print(f"Dataset type: {cfg.dataset_name}")
-                if cfg.verbose
-                else None
-            )
-            # Imagenet-specific logic
-            from vit_prisma.utils.data_utils.imagenet.imagenet_utils import (
-                setup_imagenet_paths,
-            )
-            from vit_prisma.dataloaders.imagenet_dataset import (
-                ImageNetValidationDataset,
-            )
+    #     if cfg.dataset_name == "imagenet1k":
+    #         (
+    #             print(f"Dataset type: {cfg.dataset_name}")
+    #             if cfg.verbose
+    #             else None
+    #         )
+    #         # Imagenet-specific logic
+    #         from vit_prisma.utils.data_utils.imagenet.imagenet_utils import (
+    #             setup_imagenet_paths,
+    #         )
+    #         from vit_prisma.dataloaders.imagenet_dataset import (
+    #             ImageNetValidationDataset,
+    #         )
 
-            imagenet_paths = setup_imagenet_paths(cfg.dataset_path)
+    #         imagenet_paths = setup_imagenet_paths(cfg.dataset_path)
 
-            train_data = torchvision.datasets.ImageFolder(
-                cfg.dataset_train_path, transform=data_transforms
-            )
+    #         train_data = torchvision.datasets.ImageFolder(
+    #             cfg.dataset_train_path, transform=data_transforms
+    #         )
 
-            val_data = ImageNetValidationDataset(
-                cfg.dataset_val_path,
-                imagenet_paths["label_strings"],
-                imagenet_paths["val_labels"],
-                data_transforms,
-            )
+    #         val_data = ImageNetValidationDataset(
+    #             cfg.dataset_val_path,
+    #             imagenet_paths["label_strings"],
+    #             imagenet_paths["val_labels"],
+    #             data_transforms,
+    #         )
 
-        elif cfg.dataset_name == "cifar10":
-            train_data, val_data, test_data = load_cifar_10(
-                cfg.dataset_path, image_size=cfg.image_size
-            )
-        else:
-            try:
-                from torchvision.datasets import DatasetFolder
-                from torchvision.datasets.folder import default_loader
-                from torch.utils.data import random_split
+    #     elif cfg.dataset_name == "cifar10":
+    #         train_data, val_data, test_data = load_cifar_10(
+    #             cfg.dataset_path, image_size=cfg.image_size
+    #         )
+    #     else:
+    #         try:
+    #             from torchvision.datasets import DatasetFolder
+    #             from torchvision.datasets.folder import default_loader
+    #             from torch.utils.data import random_split
 
-                dataset = DatasetFolder(
-                    root=cfg.dataset_path,
-                    loader=default_loader,
-                    extensions=('.jpg', '.jpeg', '.png'),
-                    transform=data_transforms
-                )
+    #             dataset = DatasetFolder(
+    #                 root=cfg.dataset_path,
+    #                 loader=default_loader,
+    #                 extensions=('.jpg', '.jpeg', '.png'),
+    #                 transform=data_transforms
+    #             )
 
-                train_size = int(0.8 * len(dataset))
-                print("traning data size : ", train_size)
-                cfg.total_training_images = train_size
+    #             train_size = int(0.8 * len(dataset))
+    #             print("traning data size : ", train_size)
+    #             cfg.total_training_images = train_size
 
-                val_size = len(dataset) - train_size
+    #             val_size = len(dataset) - train_size
 
-                train_data, val_data = random_split(dataset, [train_size, val_size])
-            except:
-                raise ValueError("Invalid dataset")
+    #             train_data, val_data = random_split(dataset, [train_size, val_size])
+    #         except:
+    #             raise ValueError("Invalid dataset")
         
-        print(f"Train data length: {len(train_data)}") if cfg.verbose else None
-        print(f"Validation data length: {len(val_data)}") if cfg.verbose else None
+    #     print(f"Train data length: {len(train_data)}") if cfg.verbose else None
+    #     print(f"Validation data length: {len(val_data)}") if cfg.verbose else None
     
-        return train_data, val_data
+    #     return train_data, val_data
 
     def get_checkpoint_thresholds(self):
         if self.cfg.n_checkpoints > 0:

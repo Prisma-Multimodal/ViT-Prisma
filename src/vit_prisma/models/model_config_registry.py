@@ -621,7 +621,7 @@ VIVIT_CONFIGS = {
 
 # VJEPA model configurations
 VJEPA_CONFIGS = {
-    "vjepa_v1_vit_huge_patch16_224": {
+    "vjepa_v1_vit_huge_patch16": {
         "use_cls_token": False,
         "layer_norm_pre": False,
         "return_type": "pre_logits",
