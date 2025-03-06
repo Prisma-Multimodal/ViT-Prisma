@@ -4,6 +4,8 @@ from vit_prisma.sae.config import VisionModelSAERunnerConfig
 from vit_prisma.sae.sae import StandardSparseAutoencoder, GatedSparseAutoencoder
 from vit_prisma.sae.training.activations_store import VisionActivationsStore, CacheVisionActivationStore
 
+from vit_prisma.models.base_vit import HookedViT
+
 import wandb
 
 from vit_prisma.sae.training.geometric_median import compute_geometric_median
@@ -65,13 +67,13 @@ class VisionSAETrainer:
         val_dataset: torch.utils.data.Dataset,
     ):
         self.cfg = cfg
+        self.model = model
 
         self.set_default_attributes()  # For backward compatability
 
         self.bad_run_check = (
             True if self.cfg.min_l0 and self.cfg.min_explained_variance else False
         )
-        self.model = load_model(self.cfg, self.cfg.model_name)
 
         if self.cfg.architecture == "gated":
             self.sae = GatedSparseAutoencoder(self.cfg)
@@ -85,7 +87,7 @@ class VisionSAETrainer:
         self.dataset = train_dataset
         self.eval_dataset = val_dataset
         self.activations_store = self.initialize_activations_store(
-            dataset, eval_dataset
+            self.dataset, self.eval_dataset
         )
 
         if not self.cfg.wandb_project:

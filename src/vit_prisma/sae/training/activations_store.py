@@ -169,7 +169,13 @@ class VisionActivationsStore:
         num_workers=0,
     ):
         self.cfg = cfg
+
+
         self.model = model.to(cfg.device)
+
+        self.dtype = cfg.dtype
+        if self.dtype == torch.float16:
+            self.model = self.model.half()
         self.dataset = dataset
 
         # Main dataset loader
@@ -252,9 +258,10 @@ class VisionActivationsStore:
         stop_layer = max(layers) + 1
 
         # Run model and get cached activations
-        _, layerwise_activations = self.model.run_with_cache(
-            batch_tokens, names_filter=act_names, stop_at_layer=stop_layer
-        )
+        with torch.cuda.amp.autocast(enabled=self.dtype == torch.float16):
+            _, layerwise_activations = self.model.run_with_cache(
+                batch_tokens, names_filter=act_names, stop_at_layer=stop_layer
+            )
 
         activations_list = []
         for act_name in act_names:
@@ -372,6 +379,7 @@ class VisionActivationsStore:
         for start_idx in range(0, total_size, batch_size):
             batch_tokens = next(self.image_dataloader_iter)
             batch_activations = self.get_activations(batch_tokens)
+
 
             if self.cfg.use_patches_only:
                 # Remove the CLS token if we only need patches

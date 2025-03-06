@@ -5,7 +5,7 @@ from typing import Tuple
 import torch
 from vit_prisma.models.base_text_transformer import HookedTextTransformer
 from vit_prisma.models.base_vit import HookedViT
-from vit_prisma.models.open_clip_models import hf_hub_download
+# from vit_prisma.models.open_clip_models import hf_hub_download
 from vit_prisma.sae import VisionModelSAERunnerConfig
 from vit_prisma.sae import SparseAutoencoder
 from vit_prisma.utils.constants import DEVICE

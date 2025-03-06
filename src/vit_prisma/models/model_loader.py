@@ -219,6 +219,7 @@ def load_weights(
     model_name: str,
     model_type: ModelType,
     dtype: torch.dtype,
+    local_path = None,
     **kwargs
 ) -> None:
     """
@@ -235,7 +236,10 @@ def load_weights(
     config = model.cfg
     
     # Load and convert weights
-    original_weights = load_original_weights(model_name, category, model_type, dtype, **kwargs)
+    if local_path:
+        original_weights = load_state_dict_from_local(local_path)
+    else:
+        original_weights = load_original_weights(model_name, category, model_type, dtype, **kwargs)
     converted_weights = convert_weights(original_weights, model_name, category, config, model_type)
     
     # Apply weights to model
@@ -259,7 +263,7 @@ def load_state_dict_from_local(local_path: str, device: str = 'cuda') -> dict:
     
     logging.info(f"Loading state dict from local path: {local_path}")
     # Handle special formats
-    if model_format == 'vjepa' or (model_format is None and 'jepa' in local_path.lower()):
+    if 'jepa' in local_path.lower():
         return _load_vjepa_weights(local_path, device=device)
     
     checkpoint = torch.load(
@@ -324,16 +328,6 @@ def load_hooked_model(
     Returns:
         Loaded model
     """
-    if local_path is not None and pretrained:
-        raise ValueError(
-            "Cannot specify both local_path and pretrained=True. "
-            "Set pretrained=False when loading from a local path."
-        )
-    if local_config is not None and pretrained:
-        raise ValueError(
-            "Cannot specify both local_config and pretrained=True. "
-            "Set pretrained=False when loading from a local config."
-        )
 
     assert not (
             kwargs.get("load_in_8bit", False)
@@ -359,11 +353,13 @@ def load_hooked_model(
 
     model_name = check_model_name(model_name)
 
-
-    if pretrained:
-        config = load_config(model_name, model_type, **kwargs)
-    elif local_config is not None:
+   
+    if local_config is not None:
         config = local_config
+    else:
+        config = load_config(model_name, model_type, **kwargs)
+
+
     
     if model_class is None:
         if model_type == ModelType.VISION:
@@ -376,11 +372,9 @@ def load_hooked_model(
     # Initialize model
     model = model_class(config)
     
-    # Load weights if requested
-    if pretrained:
-        state_dict = load_weights(model, model_name, model_type, dtype, **kwargs)
-    elif local_path is not None:
-        state_dict = load_state_dict_from_local(local_path)
+
+    # Load weights
+    state_dict = load_weights(model, model_name, model_type, dtype, local_path=local_path)
 
 
     model.load_and_process_state_dict(
