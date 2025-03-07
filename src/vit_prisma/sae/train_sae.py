@@ -40,6 +40,18 @@ import uuid
 
 import wandb
 
+from torch.nn.parallel import DistributedDataParallel as DDP
+# distributed sampler
+from torch.utils.data.distributed import DistributedSampler
+
+# import dist
+import torch.distributed as dist
+
+# import dataloader
+from torch.utils.data import DataLoader
+
+
+
 
 def wandb_log_suffix(cfg: Any, hyperparams: Any):
     # Create a mapping from cfg list keys to their corresponding hyperparams attributes
@@ -67,29 +79,68 @@ class VisionSAETrainer:
         val_dataset: torch.utils.data.Dataset,
     ):
         self.cfg = cfg
-        self.model = model
+        
+        # Set up the distributed device
+        if self.cfg.distributed:
+            self.cfg.device = f'cuda:{self.cfg.gpu}'
+            torch.cuda.set_device(self.cfg.gpu)
+            
+            # Calculate local batch sizes
+            self.cfg.local_train_batch_size = self.cfg.train_batch_size // self.cfg.world_size
+            self.cfg.local_store_batch_size = self.cfg.store_batch_size // self.cfg.world_size
+            
+            # Log the batch sizes if rank 0
+            if self.cfg.rank == 0:
+                print(f"Global training batch size: {self.cfg.train_batch_size}")
+                print(f"Local training batch size per GPU: {self.cfg.local_train_batch_size}")
+                print(f"Global store batch size: {self.cfg.store_batch_size}")
+                print(f"Local store batch size per GPU: {self.cfg.local_store_batch_size}")
+        else:
+            self.cfg.device = self.cfg.device if torch.cuda.is_available() else 'cpu'
+            self.cfg.local_train_batch_size = self.cfg.train_batch_size
+            self.cfg.local_store_batch_size = self.cfg.store_batch_size
+        
+        # Move model to device
+        self.model = model.to(self.cfg.device)
+        
+        # Wrap model with DDP if distributed
+        if self.cfg.distributed:
+            self.model = DDP(self.model, device_ids=[self.cfg.gpu])
 
-        self.set_default_attributes()  # For backward compatability
+        self.set_default_attributes()  # For backward compatibility
 
         self.bad_run_check = (
             True if self.cfg.min_l0 and self.cfg.min_explained_variance else False
         )
 
+        # Create the SAE and move it to the device
         if self.cfg.architecture == "gated":
-            self.sae = GatedSparseAutoencoder(self.cfg)
+            self.sparse_coder = GatedSparseAutoencoder(self.cfg).to(self.cfg.device)
         elif self.cfg.architecture == "standard" or self.cfg.architecture == "vanilla":
-            self.sae = StandardSparseAutoencoder(self.cfg)
+            self.sparse_coder = StandardSparseAutoencoder(self.cfg).to(self.cfg.device)
         else:
             raise ValueError(f"Loading of {self.cfg.architecture} not supported")
 
+        # Wrap SAE with DDP if distributed
+        if self.cfg.distributed:
+            self.sparse_coder = DDP(self.sparse_coder, device_ids=[self.cfg.gpu])
 
-        # dataset, eval_dataset = VisionSAETrainer.load_dataset(self.cfg)
+        # Set up the dataset and samplers
         self.dataset = train_dataset
         self.eval_dataset = val_dataset
         self.activations_store = self.initialize_activations_store(
             self.dataset, self.eval_dataset
         )
 
+        # Create distributed samplers if in distributed mode
+        if self.cfg.distributed:
+            self.train_sampler = DistributedSampler(self.dataset, shuffle=True)
+            self.val_sampler = DistributedSampler(self.eval_dataset, shuffle=True)
+        else:
+            self.train_sampler = None
+            self.val_sampler = None
+            
+        # Set up wandb project name if not provided
         if not self.cfg.wandb_project:
             self.cfg.wandb_project = (
                 self.cfg.model_name.replace("/", "-")
@@ -98,15 +149,93 @@ class VisionSAETrainer:
                 + "-layer-"
                 + str(self.cfg.hook_point_layer)
             )
-        self.cfg.unique_hash = uuid.uuid4().hex[
-            :8
-        ]  # Generate a random 8-character hex string
+            
+        # Generate a unique hash for this run
+        if not self.cfg.distributed or self.cfg.rank == 0:
+            self.cfg.unique_hash = uuid.uuid4().hex[:8]
+        
+        # Broadcast the unique hash to all processes if distributed
+        if self.cfg.distributed:
+            if self.cfg.rank == 0:
+                unique_hash = torch.tensor(
+                    [ord(c) for c in self.cfg.unique_hash], 
+                    dtype=torch.uint8, device=self.cfg.device
+                )
+            else:
+                unique_hash = torch.zeros(8, dtype=torch.uint8, device=self.cfg.device)
+            
+            # Broadcast the hash from rank 0 to all processes
+            dist.broadcast(unique_hash, 0)
+            
+            if self.cfg.rank != 0:
+                self.cfg.unique_hash = ''.join([chr(i) for i in unique_hash.cpu().numpy()])
+        
         self.cfg.run_name = self.cfg.unique_hash + "-" + self.cfg.wandb_project
 
+        # Setup checkpointing
         self.checkpoint_thresholds = self.get_checkpoint_thresholds()
         self.setup_checkpoint_path()
 
-        self.cfg.pretty_print() if self.cfg.verbose else None
+        # Only print config on rank 0
+        if not self.cfg.distributed or self.cfg.rank == 0:
+            self.cfg.pretty_print() if self.cfg.verbose else None
+    
+    def create_data_loader(self, dataset, sampler, is_train=True):
+        """Create a data loader for the given dataset."""
+        return DataLoader(
+            dataset,
+            batch_size=self.cfg.train_batch_size,
+            shuffle=(sampler is None and is_train),
+            sampler=sampler,
+            num_workers=self.cfg.num_workers,
+            pin_memory=True,
+            drop_last=is_train,
+        )
+
+    
+    # @torch.no_grad()
+    # def get_activations(self, images):
+    #     """Compute activations for the given images."""
+    #     hook_point_layers = (
+    #         self.cfg.hook_point_layer
+    #         if isinstance(self.cfg.hook_point_layer, list)
+    #         else [self.cfg.hook_point_layer]
+    #     )
+        
+    #     # Get the base model
+    #     if hasattr(self.model, 'module'):
+    #         model = self.model.module
+    #     else:
+    #         model = self.model
+            
+    #     # Define hook points to extract
+    #     hook_points = [self.cfg.hook_point.format(layer=layer) for layer in hook_point_layers]
+        
+    #     # Run with cache to get activations
+    #     with torch.cuda.amp.autocast(enabled=self.cfg.dtype == torch.float16):
+    #         _, cache = model.run_with_cache(images, names_filter=hook_points)
+        
+    #     # Stack activations from all layers
+    #     activations_list = []
+    #     for hook_point in hook_points:
+    #         acts = cache[hook_point]
+            
+    #         # Apply additional processing if needed
+    #         if self.cfg.hook_point_head_index is not None:
+    #             acts = acts[:, :, self.cfg.hook_point_head_index]
+                
+    #         if self.cfg.cls_token_only:
+    #             acts = acts[:, 0:1]
+    #         elif self.cfg.use_patches_only:
+    #             acts = acts[:, 1:]
+                
+    #         activations_list.append(acts)
+    #     # Create layer_acts in the format expected by train_step
+    #     # Shape: [batch_size, num_layers, d_in]
+    #     layer_acts = torch.stack(activations_list, dim=1)
+        
+    #     return layer_acts
+
 
     def set_default_attributes(self):
         """
@@ -123,28 +252,33 @@ class VisionSAETrainer:
         if self.cfg.n_checkpoints:
             # Create checkpoint path with run_name, which contains unique identifier
             self.cfg.checkpoint_path = f"{self.cfg.checkpoint_path}/{self.cfg.run_name}"
-            os.makedirs(self.cfg.checkpoint_path, exist_ok=True)
-            (
-                print(f"Checkpoint path: {self.cfg.checkpoint_path}")
-                if self.cfg.verbose
-                else None
-            )
+            
+            # Only rank 0 creates the directory
+            if not self.cfg.distributed or self.cfg.rank == 0:
+                os.makedirs(self.cfg.checkpoint_path, exist_ok=True)
+                if self.cfg.verbose:
+                    print(f"Checkpoint path: {self.cfg.checkpoint_path}")
         else:
-            print(f"Not saving checkpoints so skipping creating checkpoint directory")
+            if not self.cfg.distributed or self.cfg.rank == 0:
+                print(f"Not saving checkpoints so skipping creating checkpoint directory")
+
 
     def initialize_activations_store(self, dataset, eval_dataset):
-        # raise separate errors if dataset or eval_dataset is none or invalid format. instead of none, do dataset type
-        if dataset is None:
-            raise ValueError("Training dataset is None")
-        if eval_dataset is None:
-            raise ValueError("Eval dataset is None")
+        """Initialize the appropriate activation store with proper batch sizes."""
+        # Create a copy of the config with adjusted batch sizes for distributed mode
+        import copy
+        store_cfg = copy.deepcopy(self.cfg)
         
-
+        if self.cfg.distributed:
+            # Use local batch sizes for the activation store
+            store_cfg.train_batch_size = self.cfg.local_train_batch_size
+            store_cfg.store_batch_size = self.cfg.local_store_batch_size
+        
         if self.cfg.use_cached_activations:
-            return CacheVisionActivationStore(self.cfg)
+            return CacheVisionActivationStore(store_cfg)
 
         return VisionActivationsStore(
-            self.cfg,
+            store_cfg,
             self.model,
             dataset,
             eval_dataset=eval_dataset,
@@ -231,16 +365,23 @@ class VisionSAETrainer:
         return []
 
     def initialize_training_variables(self):
-        # num_saes = len(self.sae_group)
+        # Initialize training variables on the appropriate device
         act_freq_scores = torch.zeros(int(self.cfg.d_sae), device=self.cfg.device)
         n_forward_passes_since_fired = torch.zeros(
             int(self.cfg.d_sae), device=self.cfg.device
         )
         n_frac_active_tokens = 0
-        optimizers = Adam(self.sae.parameters(), lr=self.cfg.lr)
+        
+        # For distributed training, we need to access the module directly
+        if self.cfg.distributed:
+            optimizer_params = self.sparse_coder.module.parameters()
+        else:
+            optimizer_params = self.sparse_coder.parameters()
+            
+        optimizer = Adam(optimizer_params, lr=self.cfg.lr)
         scheduler = get_scheduler(
             self.cfg.lr_scheduler_name,
-            optimizer=optimizers,
+            optimizer=optimizer,
             warm_up_steps=self.cfg.lr_warm_up_steps,
             training_steps=self.cfg.total_training_steps,
             lr_end=self.cfg.lr / 10,
@@ -249,34 +390,78 @@ class VisionSAETrainer:
             act_freq_scores,
             n_forward_passes_since_fired,
             n_frac_active_tokens,
-            optimizers,
+            optimizer,
             scheduler,
         )
 
     def initialize_geometric_medians(self):
-        all_layers = self.sae.cfg.hook_point_layer
+        
+        # Get the appropriate hyperparams object
+        if self.cfg.distributed:
+            hyperparams = self.sparse_coder.module.cfg
+            sae_module = self.sparse_coder.module
+        else:
+            hyperparams = self.sparse_coder.cfg
+            sae_module = self.sparse_coder
+            
+        all_layers = sae_module.cfg.hook_point_layer
         geometric_medians = {}
         if not isinstance(all_layers, list):
             all_layers = [all_layers]
-        hyperparams = self.sae.cfg
+        hyperparams = sae_module.cfg
         sae_layer_id = all_layers.index(hyperparams.hook_point_layer)
+        
         if hyperparams.b_dec_init_method == "geometric_median":
-            layer_acts = self.activations_store.storage_buffer.detach()[
+            # Get local activation data
+            local_acts = self.activations_store.storage_buffer.detach()[
                 :, sae_layer_id, :
             ]
+            
             if sae_layer_id not in geometric_medians:
-                median = compute_geometric_median(layer_acts, maxiter=200).median
-                geometric_medians[sae_layer_id] = median
-            self.sae.initialize_b_dec_with_precalculated(
+                # For distributed training, compute local median first
+                local_median = compute_geometric_median(local_acts, maxiter=100).median
+                
+                # Gather medians from all processes
+                world_size = dist.get_world_size()
+                gathered_medians = [torch.zeros_like(local_median) for _ in range(world_size)]
+                dist.all_gather(gathered_medians, local_median)
+                
+                # Compute global geometric median from all local medians
+                if dist.get_rank() == 0:
+                    global_median = compute_geometric_median(
+                        torch.stack(gathered_medians), maxiter=200
+                    ).median
+                else:
+                    global_median = torch.zeros_like(local_median)
+                    
+                # Broadcast result to all processes
+                dist.broadcast(global_median, src=0)
+                geometric_medians[sae_layer_id] = global_median
+                
+            sae_module.initialize_b_dec_with_precalculated(
                 geometric_medians[sae_layer_id]
             )
+            
         elif hyperparams.b_dec_init_method == "mean":
-            layer_acts = self.activations_store.storage_buffer.detach().cpu()[
-                :, sae_layer_id, :
-            ]
-            self.sae.initialize_b_dec_with_mean(layer_acts)
-        self.sae.train()
+            # For mean initialization, use distributed averaging
+            local_acts = self.activations_store.storage_buffer.detach()[:, sae_layer_id, :]
+            local_sum = local_acts.sum(dim=0)
+            local_count = torch.tensor(local_acts.shape[0], device=local_acts.device)
+            
+            # Sum across all processes
+            global_sum = local_sum.clone()
+            global_count = local_count.clone()
+            dist.all_reduce(global_sum, op=dist.ReduceOp.SUM)
+            dist.all_reduce(global_count, op=dist.ReduceOp.SUM)
+            
+            # Compute global mean
+            global_mean = global_sum / global_count
+            
+            sae_module.initialize_b_dec_with_precalculated(global_mean)
+            
+        self.sparse_coder.train()
         return geometric_medians
+
 
     def train_step(
         self,
@@ -290,8 +475,13 @@ class VisionSAETrainer:
         n_training_steps,
         n_training_tokens,
     ):
-
-        hyperparams = sparse_autoencoder.cfg
+        # Access the module directly if using DDP
+        if self.cfg.distributed:
+            sparse_autoencoder_module = sparse_autoencoder.module
+            hyperparams = sparse_autoencoder_module.cfg
+        else:
+            sparse_autoencoder_module = sparse_autoencoder
+            hyperparams = sparse_autoencoder.cfg
 
         all_layers = (
             hyperparams.hook_point_layer
@@ -302,14 +492,31 @@ class VisionSAETrainer:
         sae_in = layer_acts[:, layer_id, :]
 
         sparse_autoencoder.train()
-        sparse_autoencoder.set_decoder_norm_to_unit_norm()
+        
+        # If DDP, need to call the module method directly
+        if self.cfg.distributed:
+            sparse_autoencoder_module.set_decoder_norm_to_unit_norm()
+        else:
+            sparse_autoencoder.set_decoder_norm_to_unit_norm()
 
         # Log feature sparsity every feature_sampling_window steps
         if (n_training_steps + 1) % self.cfg.feature_sampling_window == 0:
-            feature_sparsity = act_freq_scores / n_frac_active_tokens
+            # All-reduce act_freq_scores and n_frac_active_tokens if distributed
+            if self.cfg.distributed:
+                local_act_freq = act_freq_scores.clone()
+                local_active_tokens = torch.tensor(n_frac_active_tokens, device=self.cfg.device, dtype=torch.float32)
+                
+                # All-reduce to get global values
+                dist.all_reduce(local_act_freq)
+                dist.all_reduce(local_active_tokens)
+                
+                feature_sparsity = local_act_freq / local_active_tokens
+            else:
+                feature_sparsity = act_freq_scores / n_frac_active_tokens
+                
             log_feature_sparsity = torch.log10(feature_sparsity + 1e-10).detach().cpu()
 
-            if self.cfg.log_to_wandb:
+            if self.cfg.log_to_wandb and (not self.cfg.distributed or self.cfg.rank == 0):
                 self._log_feature_sparsity(
                     sparse_autoencoder,
                     hyperparams,
@@ -319,14 +526,14 @@ class VisionSAETrainer:
                 )
 
             act_freq_scores = torch.zeros(
-                sparse_autoencoder.cfg.d_sae, device=sparse_autoencoder.cfg.device
+                sparse_autoencoder_module.cfg.d_sae, device=sparse_autoencoder_module.cfg.device
             )
             n_frac_active_tokens = 0
 
         optimizer.zero_grad()
 
         ghost_grad_neuron_mask = (
-            n_forward_passes_since_fired > sparse_autoencoder.cfg.dead_feature_window
+            n_forward_passes_since_fired > sparse_autoencoder_module.cfg.dead_feature_window
         ).bool()
 
         # Forward and Backward Passes
@@ -353,7 +560,7 @@ class VisionSAETrainer:
 
             if self.cfg.log_to_wandb and (
                 (n_training_steps + 1) % self.cfg.wandb_log_frequency == 0
-            ):
+            ) and (not self.cfg.distributed or self.cfg.rank == 0):
                 self._log_metrics(
                     sparse_autoencoder,
                     hyperparams,
@@ -372,9 +579,6 @@ class VisionSAETrainer:
                     n_training_tokens,
                 )
 
-            # if self.cfg.log_to_wandb and ((n_training_steps + 1) % (self.cfg.wandb_log_frequency * 10) == 0):
-            #     self._run_evals(sparse_autoencoder, hyperparams, n_training_steps)
-
         loss.backward()
 
         if self.cfg.max_grad_norm:  # Gradient clipping
@@ -382,39 +586,91 @@ class VisionSAETrainer:
                 sparse_autoencoder.parameters(), max_norm=self.cfg.max_grad_norm
             )
 
-        sparse_autoencoder.remove_gradient_parallel_to_decoder_directions()
+        # Access module method directly if using DDP
+        if self.cfg.distributed:
+            sparse_autoencoder_module.remove_gradient_parallel_to_decoder_directions()
+        else:
+            sparse_autoencoder.remove_gradient_parallel_to_decoder_directions()
+            
         optimizer.step()
         scheduler.step()
 
-        return (
-            loss,
-            mse_loss,
-            l1_loss,
-            l0,
-            act_freq_scores,
-            n_forward_passes_since_fired,
-            n_frac_active_tokens,
-        )
+        # If distributed, all-reduce metrics for consistent reporting
+        if self.cfg.distributed:
+            # Create tensors for reduction
+            metrics = torch.tensor([loss.item(), mse_loss.item(), 
+                                   l1_loss.item() if l1_loss is not None else 0.0, 
+                                   l0.item()], device=self.cfg.device)
+            dist.all_reduce(metrics)
+            metrics /= self.cfg.world_size
+            
+            # Unpack the reduced metrics
+            loss_item, mse_loss_item, l1_loss_item, l0_item = metrics.tolist()
+            
+            # Create new tensors with the reduced values
+            reduced_loss = torch.tensor(loss_item, device=self.cfg.device)
+            reduced_mse_loss = torch.tensor(mse_loss_item, device=self.cfg.device)
+            reduced_l1_loss = torch.tensor(l1_loss_item, device=self.cfg.device) if l1_loss is not None else None
+            reduced_l0 = l0_item
+            
+            return (
+                reduced_loss,
+                reduced_mse_loss,
+                reduced_l1_loss,
+                reduced_l0,
+                act_freq_scores,
+                n_forward_passes_since_fired,
+                n_frac_active_tokens,
+            )
+        else:
+            return (
+                loss,
+                mse_loss,
+                l1_loss,
+                l0,
+                act_freq_scores,
+                n_forward_passes_since_fired,
+                n_frac_active_tokens,
+            )
 
     # layer_acts be a poor format - need to run in ctx_len, gt_labels format
     @torch.no_grad()
     def val(self, sparse_autoencoder):
         sparse_autoencoder.eval()
 
-        print("Running validation") if self.cfg.verbose else None
+        if dist.is_initialized() and self.cfg.verbose and dist.get_rank() == 0:
+            print("Running validation")
+        elif not dist.is_initialized() and self.cfg.verbose:
+            print("Running validation")
+
+        if self.cfg.distributed:
+            model_module = self.model.module
+            sparse_coder_module = sparse_autoencoder.module
+        else:
+            model_module = self.model
+            sparse_coder_module = sparse_autoencoder
+
+        # Initialize metrics collectors
+        all_mse_losses = []
+        all_explained_variances = []
+        all_l0_values = []
+        all_cos_sims = []
+        all_scores = []
+        all_sae_recon_losses = []
 
         for images, gt_labels in self.activations_store.image_dataloader_eval:
             images = images.to(self.cfg.device)
             gt_labels = gt_labels.to(self.cfg.device)
+            
             # needs to start with batch_size dimension
-            _, cache = self.model.run_with_cache(
-                images, names_filter=sparse_autoencoder.cfg.hook_point
+            _, cache = model_module.run_with_cache(
+                images, names_filter=sparse_coder_module.cfg.hook_point
             )
-            hook_point_activation = cache[sparse_autoencoder.cfg.hook_point].to(
+            hook_point_activation = cache[sparse_coder_module.cfg.hook_point].to(
                 self.cfg.device
             )
 
-            sae_out, feature_acts, loss, mse_loss, l1_loss, _, _ = sparse_autoencoder(
+            sae_out, feature_acts, loss, mse_loss, l1_loss, _, _ = sparse_coder_module(
                 hook_point_activation
             )
 
@@ -437,15 +693,18 @@ class VisionSAETrainer:
                     dim=0,
                 )
                 .mean(-1)
-                .tolist()
+                .item()
             )
-            # all_cosine_similarity.append(cos_sim)
 
-            # Calculate substitution loss
-            # we need to get the imagenet labels of all the images in our batch
-            # just map gt_label to imagenet name
+            # Track metrics locally for each batch
+            all_mse_losses.append(mse_loss.detach())
+            all_explained_variances.append(explained_variance.mean().detach())
+            all_l0_values.append(l0.detach())
+            all_cos_sims.append(cos_sim)
 
             # this should only run if this is a clip model
+            score = None
+            sae_recon_loss = None
             if self.cfg.model_name.startswith("open-clip:"):
                 # create a list of all imagenet classes
                 num_imagenet_classes = 1000
@@ -459,7 +718,12 @@ class VisionSAETrainer:
                     if not self.cfg.model_name.startswith("open-clip:")
                     else self.cfg.model_name[10:]
                 )
-                print(f"model_name: {model_name}")
+                
+                if dist.is_initialized() and dist.get_rank() == 0:
+                    print(f"model_name: {model_name}")
+                elif not dist.is_initialized():
+                    print(f"model_name: {model_name}")
+                    
                 # bad bad bad
                 oc_model_name = "hf-hub:" + model_name
 
@@ -472,7 +736,7 @@ class VisionSAETrainer:
                 text_embeddings = get_text_embeddings_openclip(
                     og_model, preproc, tokenizer, batch_label_names
                 )
-                # print(f"text_embeddings: {text_embeddings.shape}")
+                
                 score, model_loss, sae_recon_loss, zero_abl_loss = (
                     get_substitution_loss(
                         sparse_autoencoder,
@@ -483,52 +747,81 @@ class VisionSAETrainer:
                         device=self.cfg.device,
                     )
                 )
-                # log to w&b
-                # print(f"score: {score}")
-                # print(f"loss: {model_loss}")
-                # print(f"subst_loss: {sae_recon_loss}")
-                # print(f"zero_abl_loss: {zero_abl_loss}")
+                
+                all_scores.append(score)
+                all_sae_recon_losses.append(sae_recon_loss)
 
-            # count += 1
-            # if count > self.cfg.max_val_points:
-            #     break
+            break  # Currently runs one batch only
 
-            # print(f"sae loss: {loss}")
-            # print(f"sae loss.shape: {loss.shape}")
-            # print(f"mse_loss: {mse_loss}")
-            # print(f"l1_loss: {l1_loss}")
-            # print(f"l1_loss.shape: {l1_loss.shape}")
+        # Aggregate metrics across all processes if using distributed training
+        if dist.is_initialized():
+            # Convert lists to tensors for easier gathering
+            mse_loss_tensor = torch.tensor(all_mse_losses).mean().to(self.cfg.device)
+            exp_var_tensor = torch.tensor(all_explained_variances).mean().to(self.cfg.device)
+            l0_tensor = torch.tensor(all_l0_values).mean().to(self.cfg.device)
+            cos_sim_tensor = torch.tensor(all_cos_sims).mean().to(self.cfg.device)
+            
+            # Create tensors for gathering
+            gather_mse = [torch.zeros_like(mse_loss_tensor) for _ in range(dist.get_world_size())]
+            gather_exp_var = [torch.zeros_like(exp_var_tensor) for _ in range(dist.get_world_size())]
+            gather_l0 = [torch.zeros_like(l0_tensor) for _ in range(dist.get_world_size())]
+            gather_cos_sim = [torch.zeros_like(cos_sim_tensor) for _ in range(dist.get_world_size())]
+            
+            # Gather metrics from all processes
+            dist.all_gather(gather_mse, mse_loss_tensor)
+            dist.all_gather(gather_exp_var, exp_var_tensor)
+            dist.all_gather(gather_l0, l0_tensor)
+            dist.all_gather(gather_cos_sim, cos_sim_tensor)
+            
+            # Average the gathered metrics
+            mse_loss_final = torch.stack(gather_mse).mean().item()
+            exp_var_final = torch.stack(gather_exp_var).mean().item()
+            l0_final = torch.stack(gather_l0).mean().item()
+            cos_sim_final = torch.stack(gather_cos_sim).mean().item()
+            
+            # Handle CLIP-specific metrics if they exist
+            score_final = None
+            sae_recon_loss_final = None
+            if all_scores:
+                score_tensor = torch.tensor(all_scores).mean().to(self.cfg.device)
+                sae_recon_loss_tensor = torch.tensor(all_sae_recon_losses).mean().to(self.cfg.device)
+                
+                gather_score = [torch.zeros_like(score_tensor) for _ in range(dist.get_world_size())]
+                gather_sae_recon = [torch.zeros_like(sae_recon_loss_tensor) for _ in range(dist.get_world_size())]
+                
+                dist.all_gather(gather_score, score_tensor)
+                dist.all_gather(gather_sae_recon, sae_recon_loss_tensor)
+                
+                score_final = torch.stack(gather_score).mean().item()
+                sae_recon_loss_final = torch.stack(gather_sae_recon).mean().item()
+        else:
+            # Single process case
+            mse_loss_final = sum(all_mse_losses) / len(all_mse_losses) if all_mse_losses else 0
+            exp_var_final = sum(all_explained_variances) / len(all_explained_variances) if all_explained_variances else 0
+            l0_final = sum(all_l0_values) / len(all_l0_values) if all_l0_values else 0
+            cos_sim_final = sum(all_cos_sims) / len(all_cos_sims) if all_cos_sims else 0
+            score_final = sum(all_scores) / len(all_scores) if all_scores else None
+            sae_recon_loss_final = sum(all_sae_recon_losses) / len(all_sae_recon_losses) if all_sae_recon_losses else None
 
-            wandb.log(
-                {
-                    # Original metrics
-                    f"validation_metrics/mse_loss": mse_loss,
-                    f"validation_metrics/substitution_score": score,
-                    f"validation_metrics/substitution_loss": sae_recon_loss,
-                    f"validation_metrics/explained_variance": explained_variance.mean().item(),
-                    f"validation_metrics/L0": l0,
-                    # # New image-level metrics
-                    # f"metrics/mean_log10_per_image_sparsity{suffix}": per_image_log_sparsity.mean().item(),
-                    # f"plots/log_per_image_sparsity_histogram{suffix}": image_log_sparsity_histogram,
-                    # f"sparsity/images_below_1e-5{suffix}": (per_image_sparsity < 1e-5).sum().item(),
-                    # f"sparsity/images_below_1e-6{suffix}": (per_image_sparsity < 1e-6).sum().item(),
-                }
-            )
+        # Log metrics only on rank 0 process or in non-distributed mode
+        if (dist.is_initialized() and dist.get_rank() == 0) or not dist.is_initialized():
+            log_data = {
+                "validation_metrics/mse_loss": mse_loss_final,
+                "validation_metrics/explained_variance": exp_var_final,
+                "validation_metrics/L0": l0_final,
+            }
+            
+            if score_final is not None:
+                log_data.update({
+                    "validation_metrics/substitution_score": score_final,
+                    "validation_metrics/substitution_loss": sae_recon_loss_final,
+                })
+            
+            wandb.log(log_data)
 
-
-            # log to w&b
-            print(f"cos_sim: {cos_sim}")
-            break  # Currently runs just one batch for efficiency
-
-    # def _log_feature_sparsity(self, sparse_autoencoder, hyperparams, log_feature_sparsity, feature_sparsity, n_training_steps):
-    #     suffix = wandb_log_suffix(sparse_autoencoder.cfg, hyperparams)
-    #     wandb_histogram = wandb.Histogram(log_feature_sparsity.numpy())
-    #     wandb.log({
-    #         f"metrics/mean_log10_feature_sparsity{suffix}": log_feature_sparsity.mean().item(),
-    #         f"plots/feature_density_line_chart{suffix}": wandb_histogram,
-    #         f"sparsity/below_1e-5{suffix}": (feature_sparsity < 1e-5).sum().item(),
-    #         f"sparsity/below_1e-6{suffix}": (feature_sparsity < 1e-6).sum().item(),
-    #     }, step=n_training_steps)
+            print(f"cos_sim: {cos_sim_final}")
+            
+        
 
     def _log_feature_sparsity(
         self,
@@ -538,57 +831,25 @@ class VisionSAETrainer:
         feature_sparsity,
         n_training_steps,
     ):
-        suffix = wandb_log_suffix(sparse_autoencoder.cfg, hyperparams)
+        # Skip logging if not rank 0 in distributed setting
+        if self.cfg.distributed and self.cfg.rank != 0:
+            return
+            
+        suffix = wandb_log_suffix(
+            sparse_autoencoder.module.cfg if self.cfg.distributed else sparse_autoencoder.cfg, 
+            hyperparams
+        )
 
-        # Original feature-level sparsity calculations
+        # Calculate and log feature-level sparsity metrics
         log_sparsity_np = log_feature_sparsity.detach().cpu().numpy()
         log_sparsity_histogram = wandb.Histogram(log_sparsity_np)
 
-        # # Calculate 1/sparsity values for feature-level
-        # inverse_sparsity_np = 10 ** (-log_sparsity_np)
-        # hist, bin_edges = np.histogram(np.log10(inverse_sparsity_np), bins=50)
-        # total_tokens = len(inverse_sparsity_np)
-        # proportion = hist / total_tokens
-        # x_labels = 10 ** ((bin_edges[:-1] + bin_edges[1:]) / 2)
-
-        # # Create custom wandb chart for inverse feature-level sparsity
-        # data = [[x, y] for (x, y) in zip(x_labels, proportion)]
-        # table = wandb.Table(data=data, columns=["1/Sparsity", "Proportion of Tokens"])
-        # inverse_sparsity_chart = wandb.plot.bar(table,
-        #                                         "1/Sparsity",
-        #                                         "Proportion of Tokens",
-        #                                         title="Inverse Feature Density Distribution")
-
-        # New image-level sparsity calculations
-        # total_tokens = feature_sparsity.shape[0]
-        # n_features = feature_sparsity.shape[1] if len(feature_sparsity.shape) > 1 else 1
-
-        # # Adjust total_tokens to discard remainder, but don't exceed original value
-        # remainder = total_tokens % self.cfg.context_size
-        # total_tokens_adjusted = total_tokens - remainder
-
-        # n_images = total_tokens_adjusted // self.cfg.context_size
-        # reshaped_sparsity = feature_sparsity[:total_tokens_adjusted].view(n_images, self.cfg.context_size, n_features)
-        # per_image_sparsity = reshaped_sparsity.mean(dim=(1, 2))
-        # per_image_log_sparsity = torch.log10(per_image_sparsity)
-        # per_image_log_sparsity_np = per_image_log_sparsity.detach().cpu().numpy()
-
-        # # Create wandb Histogram for image-level log sparsity (matching original format)
-        # image_log_sparsity_histogram = wandb.Histogram(per_image_log_sparsity_np)
-
         wandb.log(
             {
-                # Original metrics
                 f"metrics/mean_log10_feature_sparsity{suffix}": log_feature_sparsity.mean().item(),
                 f"plots/log_feature_density_histogram{suffix}": log_sparsity_histogram,
-                # f"plots/inverse_feature_density_histogram{suffix}": inverse_sparsity_chart,
                 f"sparsity/below_1e-5{suffix}": (feature_sparsity < 1e-5).sum().item(),
                 f"sparsity/below_1e-6{suffix}": (feature_sparsity < 1e-6).sum().item(),
-                # # New image-level metrics
-                # f"metrics/mean_log10_per_image_sparsity{suffix}": per_image_log_sparsity.mean().item(),
-                # f"plots/log_per_image_sparsity_histogram{suffix}": image_log_sparsity_histogram,
-                # f"sparsity/images_below_1e-5{suffix}": (per_image_sparsity < 1e-5).sum().item(),
-                # f"sparsity/images_below_1e-6{suffix}": (per_image_sparsity < 1e-6).sum().item(),
             },
             step=n_training_steps,
         )
@@ -611,11 +872,16 @@ class VisionSAETrainer:
         n_training_steps,
         n_training_tokens,
     ):
+        # Skip logging if not rank 0 in distributed setting
+        if self.cfg.distributed and self.cfg.rank != 0:
+            return
+            
         current_learning_rate = optimizer.param_groups[0]["lr"]
         per_token_l2_loss = (sae_out - sae_in).pow(2).sum(dim=-1).squeeze()
         total_variance = (sae_in - sae_in.mean(0)).pow(2).sum(-1)
         explained_variance = 1 - per_token_l2_loss / total_variance
 
+        # Check for bad run conditions
         if (
             (self.bad_run_check)
             and (l0.item()) < self.cfg.min_l0
@@ -627,14 +893,24 @@ class VisionSAETrainer:
 
         n_training_images = n_training_tokens // self.cfg.context_size
 
-        if l1_loss is None:  # When using top k SAE loss
-            l1_loss = torch.tensor(0.0)
+        # Handle None case for l1_loss (when using top k SAE loss)
+        if l1_loss is None:
+            l1_loss = torch.tensor(0.0, device=self.cfg.device)
 
-        suffix = wandb_log_suffix(sparse_autoencoder.cfg, hyperparams)
+        # Generate suffix for metrics
+        suffix = wandb_log_suffix(
+            sparse_autoencoder.module.cfg if self.cfg.distributed else sparse_autoencoder.cfg, 
+            hyperparams
+        )
+        
+        # Prepare metrics dict for logging
         metrics = {
             f"losses/mse_loss{suffix}": mse_loss.item(),
-            f"losses/l1_loss{suffix}": l1_loss.item()
-            / sparse_autoencoder.l1_coefficient,
+            f"losses/l1_loss{suffix}": l1_loss.item() / (
+                sparse_autoencoder.module.l1_coefficient 
+                if self.cfg.distributed else 
+                sparse_autoencoder.l1_coefficient
+            ),
             f"losses/ghost_grad_loss{suffix}": ghost_grad_loss.item(),
             f"losses/overall_loss{suffix}": loss.item(),
             f"metrics/explained_variance{suffix}": explained_variance.mean().item(),
@@ -647,11 +923,11 @@ class VisionSAETrainer:
             "details/n_training_images": n_training_images,
         }
 
+        # Add gated SAE specific metrics if applicable
         if self.cfg.architecture == "gated":
-            metrics[f"losses/aux_reconstruction_loss{suffix}"] = (
-                aux_reconstruction_loss.item()
-            )
+            metrics[f"losses/aux_reconstruction_loss{suffix}"] = aux_reconstruction_loss.item()
 
+        # Log to wandb
         wandb.log(metrics, step=n_training_steps)
 
     def _run_evals(self, sparse_autoencoder, hyperparams, n_training_steps):
@@ -670,61 +946,115 @@ class VisionSAETrainer:
         sparse_autoencoder.train()
 
     def log_metrics(self, sae, hyperparams, metrics, n_training_steps):
-        if self.cfg.log_to_wandb and (
-            (n_training_steps + 1) % self.cfg.wandb_log_frequency == 0
-        ):
-            suffix = wandb_log_suffix(self.cfg, hyperparams)
+        # Skip if not rank 0 in distributed setting or not logging to wandb
+        if not self.cfg.log_to_wandb or (self.cfg.distributed and self.cfg.rank != 0):
+            return
+            
+        # Only log at specified frequency
+        if (n_training_steps + 1) % self.cfg.wandb_log_frequency == 0:
+            suffix = wandb_log_suffix(
+                sae.module.cfg if self.cfg.distributed else sae.cfg, 
+                hyperparams
+            )
             wandb.log(metrics, step=n_training_steps)
 
     def checkpoint(self, sae, n_training_tokens, act_freq_scores, n_frac_active_tokens):
-        # NOTE fix htis code to not be sae groups anymore
-        # path = f"{sae_group.cfg.checkpoint_path}/{n_training_images}_{sae_group.get_name()}.pt"
+        # Skip if not rank 0 in distributed setting
+        if self.cfg.distributed:
+            # Create a tensor with the current token count
+            tokens_tensor = torch.tensor([n_training_tokens], device=self.cfg.device)
+            # Broadcast from rank 0 to ensure all processes have the same value
+            dist.broadcast(tokens_tensor, src=0)
+            n_training_tokens = tokens_tensor.item()
+        
+        # Skip if not rank 0 in distributed setting
+        if self.cfg.distributed and self.cfg.rank != 0:
+            return
+            
+        # Save config first
         self.cfg.save_config(f"{self.cfg.checkpoint_path}/config.json")
 
+        # Calculate number of training images
         n_training_images = n_training_tokens // self.cfg.context_size
+        
+        # Set up checkpoint path
         path = self.cfg.checkpoint_path + f"/n_images_{n_training_images}.pt"
-        sae.set_decoder_norm_to_unit_norm()
-        sae.save_model(path)
+        
+        # Set decoder norm and save model
+        if self.cfg.distributed:
+            sae.module.set_decoder_norm_to_unit_norm()
+            sae.module.save_model(path)
+        else:
+            sae.set_decoder_norm_to_unit_norm()
+            sae.save_model(path)
 
-        wandb.log(
-            {
+        # Log checkpoint path to wandb
+        if self.cfg.log_to_wandb:
+            wandb.log({
                 "details/checkpoint_path": path,
-            }
-        )
+            })
 
         # Save log feature sparsity
         log_feature_sparsity_path = (
             self.cfg.checkpoint_path
             + f"/n_images_{n_training_images}_log_feature_sparsity.pt"
         )
-        feature_sparsity = act_freq_scores / n_frac_active_tokens
+        
+        # Calculate and save feature sparsity
+        if self.cfg.distributed:
+            # All-reduce to get global values
+            local_act_freq = act_freq_scores.clone()
+            local_active_tokens = torch.tensor(n_frac_active_tokens, device=self.cfg.device, dtype=torch.float32)
+            
+            dist.all_reduce(local_act_freq)
+            dist.all_reduce(local_active_tokens)
+            
+            feature_sparsity = local_act_freq / local_active_tokens
+        else:
+            feature_sparsity = act_freq_scores / n_frac_active_tokens
+            
         log_feature_sparsity = torch.log10(feature_sparsity + 1e-10).detach().cpu()
         torch.save(log_feature_sparsity, log_feature_sparsity_path)
 
+        # Save to wandb if enabled
         if self.cfg.log_to_wandb:
-            hyperparams = sae.cfg
+            hyperparams = sae.module.cfg if self.cfg.distributed else sae.cfg
             self.save_to_wandb(sae, hyperparams, path, log_feature_sparsity_path)
 
     def save_to_wandb(self, sae, hyperparams, path, log_feature_sparsity_path):
-        suffix = wandb_log_suffix(sae.cfg, hyperparams)
+        # Skip if not rank 0 in distributed setting
+        if self.cfg.distributed and self.cfg.rank != 0:
+            return
+            
+        suffix = wandb_log_suffix(
+            sae.module.cfg if self.cfg.distributed else sae.cfg, 
+            hyperparams
+        )
         name_for_log = re.sub(self.cfg.unique_hash, "_", suffix)
         try:
+            # Create and log model artifact
             model_artifact = wandb.Artifact(
                 f"{name_for_log}",
                 type="model",
-                metadata=dict(sae.cfg.__dict__),
+                metadata=dict(
+                    sae.module.cfg.__dict__ if self.cfg.distributed else sae.cfg.__dict__
+                ),
             )
             model_artifact.add_file(path)
             wandb.log_artifact(model_artifact)
 
+            # Create and log sparsity artifact
             sparsity_artifact = wandb.Artifact(
                 f"{name_for_log}_log_feature_sparsity",
                 type="log_feature_sparsity",
-                metadata=dict(sae.cfg.__dict__),
+                metadata=dict(
+                    sae.module.cfg.__dict__ if self.cfg.distributed else sae.cfg.__dict__
+                ),
             )
             sparsity_artifact.add_file(log_feature_sparsity_path)
             wandb.log_artifact(sparsity_artifact)
-        except:
+        except Exception as e:
+            print(f"Error saving to wandb: {e}")
             pass
 
     @staticmethod
@@ -735,15 +1065,20 @@ class VisionSAETrainer:
         for field in fields(obj):
             value = getattr(obj, field.name)
             if is_dataclass(value):
-                result[field.name] = dataclass_to_dict(value)
+                result[field.name] = VisionSAETrainer.dataclass_to_dict(value)
             else:
                 result[field.name] = value
         return result
 
     def initalize_wandb(self):
+        # Skip if not rank 0 in distributed setting
+        if self.cfg.distributed and self.cfg.rank != 0:
+            return
+            
         config_dict = self.dataclass_to_dict(self.cfg)
         run_name = self.cfg.run_name.replace(":", "_")
         wandb_project = self.cfg.wandb_project.replace(":", "_")
+        
         wandb.init(
             project=wandb_project,
             config=config_dict,
@@ -752,9 +1087,11 @@ class VisionSAETrainer:
         )
 
     def run(self):
+         # Initialize wandb on rank 0 only
         if self.cfg.log_to_wandb:
             self.initalize_wandb()
-
+        
+        # Initialize training variables
         (
             act_freq_scores,
             n_forward_passes_since_fired,
@@ -762,21 +1099,57 @@ class VisionSAETrainer:
             optimizer,
             scheduler,
         ) = self.initialize_training_variables()
+        
+        # Initialize model weights
         self.initialize_geometric_medians()
+        
+        # Track current epoch for samplers
+        self.current_epoch = 0
+        
+        # Print only on rank 0
+        if not self.cfg.distributed or self.cfg.rank == 0:
+            print("Starting training") if self.cfg.verbose else None
+            arch = 'Transcoder' if hasattr(self, 'is_transcoder') and self.is_transcoder else 'SAE'
+        
+        
+        # Create progress bar only on rank 0
+        if not self.cfg.distributed or self.cfg.rank == 0:
+            pbar = tqdm(total=self.cfg.total_training_tokens, desc=f"Training {arch}", mininterval=20)
+        
+        # Main training loop
+        global_n_training_tokens = 0
+        global_n_training_steps = 0
 
-        print("Starting training") if self.cfg.verbose else None
-
-        n_training_steps = 0
-        n_training_tokens = 0
-
-        pbar = tqdm(total=self.cfg.total_training_tokens, desc="Training SAE", mininterval=20)
-        while n_training_tokens < self.cfg.total_training_tokens:
+        while global_n_training_tokens < self.cfg.total_training_tokens:
+        # Get next batch of activations 
             layer_acts = self.activations_store.next_batch()
+            
+            # Local batch size may vary, especially at the end of dataset
+            local_batch_size = layer_acts.shape[0]
 
-            # init these here to avoid uninitialized vars
-            mse_loss = torch.tensor(0.0)
-            l1_loss = torch.tensor(0.0)
-
+            if self.cfg.distributed:
+                # Get token counts from all processes
+                local_tokens = local_batch_size * self.cfg.context_size
+                tensor_tokens = torch.tensor([local_tokens], device=self.cfg.device)
+                
+                # Sum across all processes
+                dist.all_reduce(tensor_tokens, op=dist.ReduceOp.SUM)
+                tokens_this_step = tensor_tokens.item()
+            else:
+                tokens_this_step = local_batch_size * self.cfg.context_size
+            
+            global_n_training_steps += 1
+            global_n_training_tokens += tokens_this_step
+        
+            # Update progress bar on rank 0
+            if not self.cfg.distributed or self.cfg.rank == 0:
+                pbar.update(tokens_this_step)
+                
+            # Initialize loss placeholders
+            mse_loss = torch.tensor(0.0, device=self.cfg.device)
+            l1_loss = torch.tensor(0.0, device=self.cfg.device)
+            
+            # Training step
             (
                 loss,
                 mse_loss,
@@ -786,57 +1159,72 @@ class VisionSAETrainer:
                 n_forward_passes_since_fired,
                 n_frac_active_tokens,
             ) = self.train_step(
-                sparse_autoencoder=self.sae,
+                sparse_autoencoder=self.sparse_coder,
                 optimizer=optimizer,
                 scheduler=scheduler,
                 layer_acts=layer_acts,
-                n_training_steps=n_training_steps,
-                n_training_tokens=n_training_tokens,
+                n_training_steps=global_n_training_steps,
+                n_training_tokens=global_n_training_tokens,
                 act_freq_scores=act_freq_scores,
                 n_forward_passes_since_fired=n_forward_passes_since_fired,
                 n_frac_active_tokens=n_frac_active_tokens,
             )
-
-            # if n_training_steps > 1 and n_training_steps % ((self.cfg.total_training_tokens//self.cfg.train_batch_size)//self.cfg.n_validation_runs) == 0:
-            #     self.val(self.sae)
-
-
-            n_training_steps += 1
-            n_training_tokens += self.cfg.train_batch_size
-
-            # if there are still checkpoint thresholds left, check if we need to save a checkpoint
-            if (
-                len(self.checkpoint_thresholds) > 0
-                and n_training_tokens > self.checkpoint_thresholds[0]
-            ):
+            
+            # Run validation at specified intervals
+            validation_interval = (self.cfg.total_training_tokens // self.cfg.train_batch_size) // self.cfg.n_validation_runs
+            if global_n_training_steps > 1 and validation_interval > 0 and global_n_training_tokens % validation_interval == 0:
+                self.val(self.sparse_coder)
+            
+            # Handle None loss values
+            if l1_loss is None:  # When using top k SAE loss
+                l1_loss = torch.tensor(0.0, device=self.cfg.device)
+                
+            # Check for checkpointing
+            if len(self.checkpoint_thresholds) > 0 and global_n_training_tokens > self.checkpoint_thresholds[0]:
+                # Synchronize processes before checkpointing
+                if self.cfg.distributed:
+                    dist.barrier()
+                    
                 # Save checkpoint and remove the threshold from the list
                 self.checkpoint(
-                    self.sae, n_training_tokens, act_freq_scores, n_frac_active_tokens
+                    self.sparse_coder, global_n_training_tokens, act_freq_scores, n_frac_active_tokens
                 )
-
-                if self.cfg.verbose:
-                    print(f"Checkpoint saved at {n_training_tokens} tokens")
-
+                
+                if self.cfg.verbose and (not self.cfg.distributed or self.cfg.rank == 0):
+                    print(f"Checkpoint saved at {global_n_training_tokens} tokens")
+                    
                 self.checkpoint_thresholds.pop(0)
-
-            pbar.update(self.cfg.train_batch_size)
-
-            if l1_loss is None:  # When using top k SAE loss
-                l1_loss = torch.tensor(0.0)
-
-            pbar.set_description(
-                f"Training SAE: Loss: {loss.item():.4f}, MSE Loss: {mse_loss.item():.4f}, L1 Loss: {l1_loss.item():.4f}, L0: {l0:.4f}", refresh=False
-            )
-
+                
+                # Another barrier after checkpointing
+                if self.cfg.distributed:
+                    dist.barrier()
+            
+            # Update progress bar on rank 0
+            if not self.cfg.distributed or self.cfg.rank == 0:
+                pbar.set_description(
+                    f"Training {arch}: Loss: {loss.item():.4f}, MSE: {mse_loss.item():.4f}, L1: {l1_loss.item():.4f}, L0: {l0:.4f}",
+                    refresh=False
+                )
+        
+        # Final synchronization before checkpointing
+        if self.cfg.distributed:
+            dist.barrier()
+            
         # Final checkpoint
         if self.cfg.n_checkpoints:
             self.checkpoint(
-                self.sae, n_training_tokens, act_freq_scores, n_frac_active_tokens
+                self.sparse_coder, n_training_tokens, act_freq_scores, n_frac_active_tokens
             )
-
-        if self.cfg.verbose:
-            print(f"Final checkpoint saved at {n_training_tokens} tokens")
-
-        pbar.close()
-
-        return self.sae
+            
+            if self.cfg.verbose and (not self.cfg.distributed or self.cfg.rank == 0):
+                print(f"Final checkpoint saved at {n_training_tokens} tokens")
+        
+        # Close progress bar on rank 0
+        if not self.cfg.distributed or self.cfg.rank == 0:
+            pbar.close()
+        
+        # Final sync barrier
+        if self.cfg.distributed:
+            dist.barrier()
+            
+        return self.sparse_coder

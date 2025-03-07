@@ -11,6 +11,30 @@ import os
 import torch
 from vit_prisma.configs.HookedViTConfig import HookedViTConfig
 
+import torch.distributed as dist
+import logging
+
+def setup_logger():
+    """Configure logging to print only on rank 0"""
+    rank = 0
+    if dist.is_initialized():
+        rank = dist.get_rank()
+    
+    # Create logger
+    logger = logging.getLogger()
+    
+    # Only process with rank 0 should output logs
+    if rank == 0:
+        logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.ERROR)  # Or logging.CRITICAL to suppress most messages
+    
+    return logger
+
+# Then in your main code:
+logger = setup_logger()
+
+
 # Define a mapping from string to torch.dtype
 dtype_mapping = {
     "float32": torch.float32,
@@ -108,7 +132,7 @@ class VisionModelSAERunnerConfig:
     # Training length parameters
     num_epochs: int = 10
 
-    # Logging
+    # logger
     verbose: bool = False
 
     # Training Parameters
@@ -241,7 +265,7 @@ class VisionModelSAERunnerConfig:
             )
 
         if self.b_dec_init_method == "zeros":
-            logging.warning(
+            logger.warning(
                 "Warning: We are initializing b_dec to zeros. This is probably not what you want."
             )
 
@@ -258,7 +282,7 @@ class VisionModelSAERunnerConfig:
         
         if os.getenv("EVAL_MODE", "false").lower() in {"true", "1"}:
             self.is_training = False
-            logging.info("Evaluation mode detected via environment variable; setting is_training to False.")
+            logger.info("Evaluation mode detected via environment variable; setting is_training to False.")
 
         if self.cls_token_only and self.use_patches_only:
             raise ValueError("Configuration error: 'cls_token_only' and 'use_patches_only' cannot both be True.")
@@ -272,40 +296,42 @@ class VisionModelSAERunnerConfig:
             self.total_training_steps // self.feature_sampling_window
         )
 
+
+
         # fmt:off
         # Log useful information
-        logging.info(f"n_tokens_per_buffer (millions): {n_tokens_per_buffer / 1e6}")
-        logging.info(
+        logger.info(f"n_tokens_per_buffer (millions): {n_tokens_per_buffer / 1e6}")
+        logger.info(
             f"Lower bound: n_contexts_per_buffer (millions): {n_contexts_per_buffer / 1e6}"
         )
-        logging.info(f"Total training steps: {self.total_training_steps}")
-        logging.info(f"Total training images: {self.total_training_images}")
-        logging.info(
+        logger.info(f"Total training steps: {self.total_training_steps}")
+        logger.info(f"Total training images: {self.total_training_images}")
+        logger.info(
             f"Total wandb updates: {self.total_training_steps // self.wandb_log_frequency}"
         )
-        logging.info(f"Expansion factor: {self.expansion_factor}")
+        logger.info(f"Expansion factor: {self.expansion_factor}")
 
-        logging.info(
+        logger.info(
             f"n_tokens_per_feature_sampling_window (millions): {self.feature_sampling_window * self.context_size * self.train_batch_size / 1e6}"
         )
-        logging.info(
+        logger.info(
             f"n_tokens_per_dead_feature_window (millions): {self.dead_feature_window * self.context_size * self.train_batch_size / 1e6}"
         )
-        logging.info(
+        logger.info(
             f"We will reset the sparsity calculation {n_feature_window_samples} times."
         )
-        logging.info(
+        logger.info(
             f"Number tokens in sparsity calculation window: {self.feature_sampling_window * self.train_batch_size:.2e}"
         )
 
         # Log configuration options
         if self.use_ghost_grads:
-            logging.info("Using Ghost Grads.")
+            logger.info("Using Ghost Grads.")
 
         if self.max_grad_norm:
-            logging.info(f"Gradient clipping with max_norm={self.max_grad_norm}")
+            logger.info(f"Gradient clipping with max_norm={self.max_grad_norm}")
 
-        logging.info(f"Using SAE initialization method: {self.initialization_method}")
+        logger.info(f"Using SAE initialization method: {self.initialization_method}")
         # fmt:on
 
     def is_property(self, attr_name):
@@ -380,7 +406,7 @@ class VisionModelSAERunnerConfig:
         for legacy_key in ["total_training_images", "total_training_tokens", "d_sae"]:
             if legacy_key in data:
                 # Log a warning about the deprecated field being ignored
-                logging.warning(
+                logger.warning(
                     f"Deprecated field '{legacy_key}' found in config. It will be ignored."
                 )
                 # If you need to do something with these values, do it here before removing

@@ -30,6 +30,8 @@ from transformers import (
 from vit_prisma.configs.HookedTextTransformerConfig import HookedTextTransformerConfig
 from vit_prisma.utils.enums import ModelType
 
+import torch.distributed as dist
+
 try:
     from huggingface_hub import hf_hub_download
 
@@ -42,6 +44,26 @@ except ImportError:
     _has_hf_hub = False
 
 import json
+
+def setup_logger():
+    """Configure logging to print only on rank 0"""
+    rank = 0
+    if dist.is_initialized():
+        rank = dist.get_rank()
+    
+    # Create logger
+    logger = logging.getLogger()
+    
+    # Only process with rank 0 should output logs
+    if rank == 0:
+        logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.ERROR)  # Or logging.CRITICAL to suppress most messages
+    
+    return logger
+
+# Then in your main code:
+logger = setup_logger()
 
 
 def convert_vjepa_weights(
@@ -137,7 +159,7 @@ def convert_kandinsky_clip_weights(
 ):
     new_vision_model_state_dict = {}
 
-    logging.info("Convering Kandinsky Clip weights")
+    logger.info("Convering Kandinsky Clip weights")
 
     # Convert embedding layers
     new_vision_model_state_dict["cls_token"] = (
@@ -170,12 +192,12 @@ def convert_kandinsky_clip_weights(
         "vision_model.pre_layrnorm.bias"
     ]
 
-    logging.info(
+    logger.info(
         "visual projection shape", old_state_dict["visual_projection.weight"].shape
     )
 
     # Convert transformer blocks
-    logging.info("doing number of layers", cfg.n_layers)
+    logger.info("doing number of layers", cfg.n_layers)
     for layer in range(cfg.n_layers):
         old_layer_key = f"vision_model.encoder.layers.{layer}"
         new_layer_key = f"blocks.{layer}"
@@ -285,7 +307,7 @@ def convert_open_clip_weights(
     new_vision_model_state_dict["ln_pre.w"] = old_state_dict["visual.ln_pre.weight"]
     new_vision_model_state_dict["ln_pre.b"] = old_state_dict["visual.ln_pre.bias"]
 
-    logging.info("visual projection shape", old_state_dict["visual.proj"].shape)
+    logger.info("visual projection shape", old_state_dict["visual.proj"].shape)
 
     new_vision_model_state_dict["head.W_H"] = old_state_dict["visual.proj"]
     new_vision_model_state_dict["head.b_H"] = torch.zeros((cfg.n_classes,))
@@ -910,7 +932,7 @@ def fill_missing_keys(model, state_dict):
             # Skip keys that are from the HuggingFace model, if loading from HF.
             continue
         if "W_" in key:
-            logging.warning(
+            logger.warning(
                 "Missing key for a weight matrix in pretrained, filled in with an empty tensor: {}".format(
                     key
                 )
@@ -953,7 +975,7 @@ def download_pretrained_from_hf(
     revision=None,
     cache_dir: Union[str, None] = None,
 ):
-    logging.info("model_id download_pretrained_from_hf:", model_id)
+    logger.info("model_id download_pretrained_from_hf:", model_id)
     has_hf_hub(True)
     cached_file = hf_hub_download(
         model_id, filename, revision=revision, cache_dir=cache_dir

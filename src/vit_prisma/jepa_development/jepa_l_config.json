@@ -31,7 +31,7 @@
     
     "is_training": true,
     
-    "n_batches_in_buffer": 20,
+    "n_batches_in_buffer": 32,
     "store_batch_size": 32,
     "num_workers": 16,
     
@@ -45,7 +45,7 @@
     "lr_scheduler_name": "cosineannealingwarmup",
     "lr_warm_up_steps": 500,
     
-    "train_batch_size": 512,
+    "train_batch_size": 32,
     
     "min_l0": null,
     "min_explained_variance": null,

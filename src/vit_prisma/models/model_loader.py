@@ -57,6 +57,30 @@ DTYPE_FROM_STRING = {
 }
 
 
+import torch.distributed as dist
+import logging
+
+def setup_logger():
+    """Configure logging to print only on rank 0"""
+    rank = 0
+    if dist.is_initialized():
+        rank = dist.get_rank()
+    
+    # Create logger
+    logger = logging.getLogger()
+    
+    # Only process with rank 0 should output logs
+    if rank == 0:
+        logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.ERROR)  # Or logging.CRITICAL to suppress most messages
+    
+    return logger
+
+# Then in your main code:
+logger = setup_logger()
+
+
 MODELS_MISSING_CONFIG = {
         "open-clip:laion/CLIP-ViT-B-32-xlm-roberta-base-laion5B-s13B-b90k": ("xlm-roberta-base-ViT-B-32", "laion5b_s13b_b90k"),
         "open-clip:laion/CLIP-ViT-B-32-roberta-base-laion2B-s12B-b32k": ("roberta-ViT-B-32", "laion2b_s12b_b32k"),
@@ -150,7 +174,6 @@ FAILING_MODELS = {
 # ===============================
 
 
-
 def load_config(
     model_name: str,
     model_type: ModelType = ModelType.VISION,
@@ -205,13 +228,13 @@ def load_config(
 def check_model_name(model_name: str) -> str:
     if model_name in MODELS_MISSING_CONFIG:
         model_name = MODELS_MISSING_CONFIG[model_name][0]
-        logging.warning(f"Model '{model_name}' is missing a configuration in the registry. Using '{model_name}' instead.")
+        logger.warning(f"Model '{model_name}' is missing a configuration in the registry. Using '{model_name}' instead.")
     if model_name in FAILING_MODELS:
         raise ValueError(f"Model '{model_name}' is not supported, currently in list of models failing tests.")
     elif model_name in PASSING_MODELS:
-        logging.info(f"Model '{model_name}' is supported and passes tests.")
+        logger.info(f"Model '{model_name}' is supported and passes tests.")
     else:
-        logging.warning(f"Model '{model_name}' is not in the lists of models passing or failing tests. Unclear status. You may want to check that the HookedViT matches the original model under tests/test_loading_clip.py.")
+        logger.warning(f"Model '{model_name}' is not in the lists of models passing or failing tests. Unclear status. You may want to check that the HookedViT matches the original model under tests/test_loading_clip.py.")
     return model_name
 
 def load_weights(
@@ -261,7 +284,7 @@ def load_state_dict_from_local(local_path: str, device: str = 'cuda') -> dict:
     if not os.path.exists(local_path):
         raise FileNotFoundError(f"No checkpoint file found at {local_path}")
     
-    logging.info(f"Loading state dict from local path: {local_path}")
+    logger.info(f"Loading state dict from local path: {local_path}")
     # Handle special formats
     if 'jepa' in local_path.lower():
         return _load_vjepa_weights(local_path, device=device)
@@ -347,7 +370,7 @@ def load_hooked_model(
         (kwargs.get("torch_dtype", None) == torch.float16)
         or dtype == torch.float16
     ) and device in ["cpu", None]:
-        logging.warning(
+        logger.warning(
             "float16 models may not work on CPU. Consider using a GPU or bfloat16."
         )
 
@@ -393,7 +416,7 @@ def load_hooked_model(
     if move_to_device:
         model.move_model_modules_to_device()
 
-    logging.info(f"Loaded pretrained model {model_name} into HookedTransformer")
+    logger.info(f"Loaded pretrained model {model_name} into HookedTransformer")
     return model 
 
 def _get_general_hf_config(model_name: str, model_type = None):
@@ -727,7 +750,7 @@ def fill_missing_keys(model, state_dict):
     missing_keys = set(default_state_dict.keys()) - set(state_dict.keys())
     
     if missing_keys:
-        logging.info(f"Filling in {len(missing_keys)} missing keys with default initialization")
+        logger.info(f"Filling in {len(missing_keys)} missing keys with default initialization")
     
     for key in missing_keys:
         if "hf_model" in key:
@@ -735,7 +758,7 @@ def fill_missing_keys(model, state_dict):
             continue
             
         if "W_" in key:
-            logging.warning(f"Missing key for weight matrix: {key}")
+            logger.warning(f"Missing key for weight matrix: {key}")
             
         state_dict[key] = default_state_dict[key]
         
