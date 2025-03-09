@@ -13,7 +13,7 @@
     "architecture": "vanilla",
     
     "b_dec_init_method": "geometric_median",
-    "expansion_factor": 128,
+    "expansion_factor": 64,
     "from_pretrained_path": null,
     
     "_device": "cuda",

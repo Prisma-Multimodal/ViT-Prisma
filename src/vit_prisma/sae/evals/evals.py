@@ -221,26 +221,26 @@ def average_l0_test(cfg, val_dataloader, sparse_autoencoder, model, evaluation_m
     print(f"Saved average l0 figure to {save_path}") if cfg.verbose else None
 
 
-# # due to loading issues with laion/CLIP-ViT-B-32-DataComp.XL-s13B-b90k
-# def get_text_embeddings_openclip(vanilla_model, processor, tokenizer, original_text, batch_size=32):
-#     # Split the text into batches
-#     text_batches = [original_text[i:i+batch_size] for i in range(0, len(original_text), batch_size)]
+# due to loading issues with laion/CLIP-ViT-B-32-DataComp.XL-s13B-b90k
+def get_text_embeddings_openclip(vanilla_model, processor, tokenizer, original_text, batch_size=32):
+    # Split the text into batches
+    text_batches = [original_text[i:i+batch_size] for i in range(0, len(original_text), batch_size)]
 
-#     all_embeddings = []
+    all_embeddings = []
 
-#     for batch in text_batches:
-#         inputs = tokenizer(batch)
-#         # inputs = {k: v.to(cfg.device) for k, v in inputs.items()}
-#         with torch.no_grad():
-#             text_embeddings = vanilla_model.encode_text(inputs)
+    for batch in text_batches:
+        inputs = tokenizer(batch)
+        # inputs = {k: v.to(cfg.device) for k, v in inputs.items()}
+        with torch.no_grad():
+            text_embeddings = vanilla_model.encode_text(inputs)
 
-#         text_embeddings = text_embeddings / text_embeddings.norm(dim=-1, keepdim=True)
-#         all_embeddings.append(text_embeddings)
+        text_embeddings = text_embeddings / text_embeddings.norm(dim=-1, keepdim=True)
+        all_embeddings.append(text_embeddings)
 
-#     # Concatenate all batches
-#     final_embeddings = torch.cat(all_embeddings, dim=0)
+    # Concatenate all batches
+    final_embeddings = torch.cat(all_embeddings, dim=0)
 
-#     return final_embeddings
+    return final_embeddings
 
 
 # # this needs to be redone to not assume huggingface
