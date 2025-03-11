@@ -1,8 +1,8 @@
 """
 Prisma Repo
-By Sonia Joseph
+By firstname Joseph
 
-Copyright (c) Sonia Joseph. All rights reserved.
+Copyright (c) firstname Joseph. All rights reserved.
 
 Inspired by TransformerLens. Some functions have been adapted from the TransformerLens project.
 For more information on TransformerLens, visit: https://github.com/neelnanda-io/TransformerLens
@@ -1062,7 +1062,7 @@ def convert_hf_vit_for_image_classification_weights(
 #                 "kandinsky-community/kandinsky-2-1-prior",
 #                 subfolder="image_encoder",
 #                 torch_dtype=torch.float16,
-#                 cache_dir="/network/scratch/s/sonia.joseph/diffusion",
+#                 cache_dir="/network/scratch/s/firstname.joseph/diffusion",
 #             ).to("cuda")
 #             old_state_dict = hf_model.state_dict()
 #             state_dict = convert_kandinsky_clip_weights(old_state_dict, cfg)

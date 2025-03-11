@@ -172,7 +172,7 @@ def main(args_eval, resume_preempt=False):
 
     model_name = "vjepa_v1_vit_huge"
     config = CONFIGS["v1"]["vit_h"]
-    model_paths = yaml.safe_load(open('/private/home/soniajoseph/ViT-Prisma/src/vit_prisma/vjepa_hf/paths_cw.yaml'))
+    model_paths = yaml.safe_load(open('/private/home/firstnamejoseph/ViT-Prisma/src/vit_prisma/vjepa_hf/paths_cw.yaml'))
     model_path = model_paths[model_name]["loc"]
     encoder = VJEPAModel.from_pretrained(model_path)
     encoder = encoder.to(device)

@@ -121,7 +121,7 @@ def test_loading_open_clip():
 
 @pytest.mark.skip(reason="TODO: Reliant on files not in repo")
 def test_accuracy_baseline_og_model():
-    parent_dir = '/network/scratch/s/sonia.joseph/clip_benchmark/'
+    parent_dir = '/network/scratch/s/firstname.joseph/clip_benchmark/'
     classifier = np.load(os.path.join(parent_dir, 'imagenet_classifier_hf_hub_laion_CLIP_ViT_B_32_DataComp.XL_s13B_b90K.npy'))
 
     og_model_name = 'laion/CLIP-ViT-B-32-DataComp.XL-s13B-b90K'
@@ -132,7 +132,7 @@ def test_accuracy_baseline_og_model():
     print("Classifier and model loaded")
 
     data = {}
-    dataset_path =  "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets"
+    dataset_path =  "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets"
     data['imagenet-val'] = load_imagenet(preprocess_transform=preprocess, dataset_path=dataset_path, dataset_type='imagenet1k-val')
     epoch = 1
     results = zero_shot_eval(og_model, data, epoch, model_name=model_name, pretrained_classifier=classifier)

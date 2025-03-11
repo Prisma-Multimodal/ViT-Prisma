@@ -16,7 +16,7 @@ from transformers import CLIPVisionModelWithProjection
 import torch
 
 # For OpenCLIP models
-cache_dir = '/network/scratch/s/sonia.joseph/hub'
+cache_dir = '/network/scratch/s/firstname.joseph/hub'
 os.environ['HUGGINGFACE_HUB_CACHE'] = cache_dir
 os.environ['OPEN_CLIP_CACHE'] = cache_dir
 os.environ['TRANSFORMERS_CACHE'] = cache_dir
@@ -40,7 +40,7 @@ def test_output():
 
 @pytest.mark.skip(reason="TODO: Reliant on files not in repo")
 def test_accuracy_baseline_og_model():
-    parent_dir = '/network/scratch/s/sonia.joseph/clip_benchmark/'
+    parent_dir = '/network/scratch/s/firstname.joseph/clip_benchmark/'
     classifier = np.load(os.path.join(parent_dir, 'imagenet_classifier_hf_hub_laion_CLIP_ViT_bigG_14_laion2B_39B_b160k.npy'))
 
     model_name = 'hf-hub:' + og_model_nam
@@ -50,7 +50,7 @@ def test_accuracy_baseline_og_model():
     print("Classifier and model loaded")
 
     data = {}
-    dataset_path =  "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets"
+    dataset_path =  "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets"
     data['imagenet-val'] = load_imagenet(preprocess_transform=preprocess, dataset_path=dataset_path, dataset_type='imagenet1k-val')
     epoch = 1
     results = zero_shot_eval(og_model, data, epoch, model_name=model_name, pretrained_classifier=classifier)
@@ -59,7 +59,7 @@ def test_accuracy_baseline_og_model():
 
 @pytest.mark.skip(reason="TODO: Reliant on files not in repo")
 def test_accuracy_baseline_hooked_model():
-    parent_dir = '/network/scratch/s/sonia.joseph/clip_benchmark/'
+    parent_dir = '/network/scratch/s/firstname.joseph/clip_benchmark/'
     classifier = np.load(os.path.join(parent_dir, 'imagenet_classifier_hf_hub_laion_CLIP_ViT_bigG_14_laion2B_39B_b160k.npy'))
 
     hooked_model = HookedViT.from_pretrained(og_model_name, is_timm=False, is_clip=True, fold_ln=False, center_writing_weights=False) # in future, do all models
@@ -75,7 +75,7 @@ def test_accuracy_baseline_hooked_model():
     print(preprocess)
 
     data = {}
-    dataset_path =  "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets"
+    dataset_path =  "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets"
     data['imagenet-val'] = load_imagenet(preprocess_transform=preprocess, dataset_path=dataset_path, dataset_type='imagenet1k-val')
     epoch = 1
     results = zero_shot_eval(hooked_model, data, epoch, model_name=og_model_name, pretrained_classifier=classifier)

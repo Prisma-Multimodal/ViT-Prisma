@@ -545,7 +545,7 @@ def random_resized_crop_with_shift(
     ratio=(3.0 / 4.0, 4.0 / 3.0),
 ):
     """
-    This is similar to random_resized_crop. However, it samples two different
+    This is siinstitutionr to random_resized_crop. However, it samples two different
     boxes (for cropping) for the first and last frame. It then linearly
     interpolates the two boxes for other frames.
 

@@ -63,7 +63,7 @@ def test_loading_text_and_vision_laion_open_clip_model():
         class_probs = (100.0 * image_features @ text_features.T).softmax(dim=-1)
         loaded_class_probs = (100.0 * loaded_image_features @ loaded_text_features.T).softmax(dim=-1)
 
-    # Then: check cosine similarities align with correct label
+    # Then: check cosine siinstitutionrities align with correct label
     assert torch.allclose(class_probs, torch.tensor([[1., 0., 0.]]), atol=0.02)
     assert torch.allclose(loaded_class_probs, torch.tensor([[1., 0., 0.]]), atol=0.02)
 

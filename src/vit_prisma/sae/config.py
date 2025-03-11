@@ -135,12 +135,12 @@ class VisionModelSAERunnerConfig:
 
     # Imagenet1k
     dataset_name: str = "imgnet"
-    dataset_path: str = "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets"
+    dataset_path: str = "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets"
     dataset_train_path: str = (
-        "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train"
+        "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train"
     )
     dataset_val_path: str = (
-        "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val"
+        "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val"
     )
 
     # Resampling protocol args

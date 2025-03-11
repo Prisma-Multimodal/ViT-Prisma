@@ -48,14 +48,14 @@ from functools import partial
 
 @dataclass
 class EvalConfig(VisionModelSAERunnerConfig):
-    sae_path: str = '/network/scratch/s/sonia.joseph/sae_checkpoints/tinyclip_40M_mlp_out/1f89d99e-wkcn-TinyCLIP-ViT-40M-32-Text-19M-LAION400M-expansion-16/n_images_520028.pt'
+    sae_path: str = '/network/scratch/s/firstname.joseph/sae_checkpoints/tinyclip_40M_mlp_out/1f89d99e-wkcn-TinyCLIP-ViT-40M-32-Text-19M-LAION400M-expansion-16/n_images_520028.pt'
     model_name: str = "wkcn/TinyCLIP-ViT-40M-32-Text-19M-LAION400M"
     model_type: str =  "clip"
     patch_size: str = 32
 
-    dataset_path: str = "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets"
-    dataset_train_path: str = "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train"
-    dataset_val_path: str = "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val"
+    dataset_path: str = "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets"
+    dataset_train_path: str = "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train"
+    dataset_val_path: str = "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val"
 
     verbose: bool = True
 
@@ -275,7 +275,7 @@ def get_text_embeddings_openclip(vanilla_model, processor, tokenizer, original_t
 
 def get_text_embeddings(model_name, device):
     model_simple_name = model_name.split("/")[-1]
-    text_embedding_path = f'/home/mila/s/sonia.joseph/cvpr-2025/src/clip_circuits/sparse_feature_circuits/greedy_steering/text_data/{model_simple_name}_text_embeddings.npy'
+    text_embedding_path = f'/home/institution/s/firstname.joseph/cvpr-2025/src/clip_circuits/sparse_feature_circuits/greedy_steering/text_data/{model_simple_name}_text_embeddings.npy'
     text_features = np.load(text_embedding_path)
     print(f"Loading precomputed text embeddings from {text_embedding_path}...")
     text_features = torch.tensor(text_features).to(device)
@@ -302,11 +302,11 @@ def get_substitution_loss(
     # Get image embeddings
     image_embeddings, _ = model.run_with_cache(batch_tokens)
 
-    # Calculate similarity scores
+    # Calculate siinstitutionrity scores
     # print(f"image_embeddings.shape: {image_embeddings.shape}")
     # print(f"text_embeddings.shape: {text_embeddings.shape}")
 
-    softmax_values, top_k_indices = get_similarity(image_embeddings, text_embeddings, device=device)
+    softmax_values, top_k_indices = get_siinstitutionrity(image_embeddings, text_embeddings, device=device)
     class_logits = get_logits(image_embeddings, text_embeddings, device=device)
     # print(f"softmax_values: {softmax_values}")
     # print(f"softmax_values.shape: {softmax_values.shape}")
@@ -341,7 +341,7 @@ def get_substitution_loss(
         batch_tokens,
         fwd_hooks=[(hook_point, partial(replacement_hook))],
     )
-    # recons_softmax_values, _ = get_similarity(recons_image_embeddings, text_embeddings, device=device)
+    # recons_softmax_values, _ = get_siinstitutionrity(recons_image_embeddings, text_embeddings, device=device)
     recons_softmax_values = get_logits(recons_image_embeddings, text_embeddings, device=device)
     recons_loss = F.cross_entropy(recons_softmax_values, gt_labels)
 
@@ -360,7 +360,7 @@ def get_logits(image_features, text_features, device='cuda'):
     return (image_features.to(device) @ text_features.to(device).T)
 
 
-def get_similarity(image_features, text_features, k=5, device='cuda'):
+def get_siinstitutionrity(image_features, text_features, k=5, device='cuda'):
   image_features = image_features.to(device)
   text_features = text_features.to(device)
 
@@ -424,7 +424,7 @@ def process_dataset(model, sparse_autoencoder, dataloader, cfg):
     total_reconstruction_loss = 0
     total_zero_abl_loss = 0
     total_samples = 0
-    all_cosine_similarity = []
+    all_cosine_siinstitutionrity = []
 
     model.eval()
     sparse_autoencoder.eval()
@@ -474,11 +474,11 @@ def process_dataset(model, sparse_autoencoder, dataloader, cfg):
             image_l0 = l0.sum(dim=1)  # Sum across all tokens  
             all_l0_image.extend(image_l0.cpu().numpy())
 
-            # Calculate cosine similarity between original activations and sae output
-            cos_sim = torch.cosine_similarity(einops.rearrange(hook_point_activation, "batch seq d_mlp -> (batch seq) d_mlp"),
+            # Calculate cosine siinstitutionrity between original activations and sae output
+            cos_sim = torch.cosine_siinstitutionrity(einops.rearrange(hook_point_activation, "batch seq d_mlp -> (batch seq) d_mlp"),
                                                                               einops.rearrange(sae_out, "batch seq d_mlp -> (batch seq) d_mlp"),
                                                                                 dim=0).mean(-1).tolist()
-            all_cosine_similarity.append(cos_sim)
+            all_cosine_siinstitutionrity.append(cos_sim)
 
             # Calculate substitution loss
             score, loss, recons_loss, zero_abl_loss = get_substitution_loss(sparse_autoencoder, model, batch_tokens, gt_labels, 
@@ -500,7 +500,7 @@ def process_dataset(model, sparse_autoencoder, dataloader, cfg):
     avg_l0_cls = np.mean(all_l0_cls)
     avg_l0_image = np.mean(all_l0_image)
 
-    avg_cos_sim = np.mean(all_cosine_similarity)
+    avg_cos_sim = np.mean(all_cosine_siinstitutionrity)
     log_frequencies_per_token = calculate_log_frequencies(total_acts, total_tokens)
     log_frequencies_per_image = calculate_log_frequencies(total_acts, total_images)
 
@@ -508,7 +508,7 @@ def process_dataset(model, sparse_autoencoder, dataloader, cfg):
     print(f"Average L0 (features activated): {avg_l0:.6f}")
     print(f"Average L0 (features activated) per CLS token: {avg_l0_cls:.6f}")
     print(f"Average L0 (features activated) per image: {avg_l0_image:.6f}")
-    print(f"Average Cosine Similarity: {avg_cos_sim:.4f}")
+    print(f"Average Cosine Siinstitutionrity: {avg_cos_sim:.4f}")
     print(f"Average Loss: {avg_loss:.6f}")
     print(f"Average Reconstruction Loss: {avg_reconstruction_loss:.6f}")
     print(f"Average Zero Ablation Loss: {avg_zero_abl_loss:.6f}")
@@ -747,7 +747,7 @@ def visualize_sparsities(cfg, log_freq_tokens, log_freq_images, conditions, cond
             rare_encoder_directions = sparse_autoencoder.W_enc[:, condition]
             rare_encoder_directions_normalized = rare_encoder_directions / rare_encoder_directions.norm(dim=0, keepdim=True)
 
-            # Compute their pairwise cosine similarities & sample randomly from this N*N matrix of similarities
+            # Compute their pairwise cosine siinstitutionrities & sample randomly from this N*N matrix of siinstitutionrities
             cos_sims_rare = (rare_encoder_directions_normalized.T @ rare_encoder_directions_normalized).flatten()
             cos_sims_rare_random_sample = cos_sims_rare[torch.randint(0, cos_sims_rare.shape[0], (10000,))]
 
@@ -755,10 +755,10 @@ def visualize_sparsities(cfg, log_freq_tokens, log_freq_images, conditions, cond
             hist(
                 cfg,
                 cos_sims_rare_random_sample,
-                f"{name}_low_prop_similarity_{condition_text}",
+                f"{name}_low_prop_siinstitutionrity_{condition_text}",
                 show=False,
                 marginal="box", 
-                title=f"{name} Cosine similarities of random {condition_text} <br> encoder directions with each other ({percentage}% of features)",
+                title=f"{name} Cosine siinstitutionrities of random {condition_text} <br> encoder directions with each other ({percentage}% of features)",
                 labels={"x": "Cosine sim"},
                 histnorm="percent",
                 template="ggplot2",
@@ -1052,7 +1052,7 @@ if __name__ == '__main__':
     # The argument parser will overwrite the config
     parser = argparse.ArgumentParser(description="Evaluate sparse autoencoder")
     # parser.add_argument("--sae_path", type=str, 
-    #                     default='/network/scratch/s/sonia.joseph/models--Prisma-Multimodal--sparse-autoencoder-clip-b-32-sae-vanilla-x64-layer-9-hook_resid_post-l1-1e-05/snapshots/9ec4ff364c08d2413b59e8e87b55c07bd4f1096a/n_images_2600058.pt',
+    #                     default='/network/scratch/s/firstname.joseph/models--Prisma-Multimodal--sparse-autoencoder-clip-b-32-sae-vanilla-x64-layer-9-hook_resid_post-l1-1e-05/snapshots/9ec4ff364c08d2413b59e8e87b55c07bd4f1096a/n_images_2600058.pt',
     #                     help="Path to sparse autoencoder")
     parser.add_argument("--model_name", type=str, 
                         default="open-clip:laion/CLIP-ViT-B-32-DataComp.XL-s13B-b90K",
@@ -1060,13 +1060,13 @@ if __name__ == '__main__':
     parser.add_argument("--model_type", type=str, default="clip", help="Type of the model")
     parser.add_argument("--patch_size", type=int, default=32, help="Patch size")
     parser.add_argument("--dataset_path", type=str, 
-                        default="/network/scratch/s/sonia.joseph/datasets/kaggle_datasets",
+                        default="/network/scratch/s/firstname.joseph/datasets/kaggle_datasets",
                         help="Path to the dataset")
     parser.add_argument("--dataset_train_path", type=str, 
-                        default="/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train",
+                        default="/network/scratch/s/firstname.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train",
                         help="Path to the training dataset")
     parser.add_argument("--dataset_val_path", type=str, 
-                        default="/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val",
+                        default="/network/scratch/s/firstname.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val",
                         help="Path to the validation dataset")
     parser.add_argument("--device", type=str, default="cuda", help="Device to use")
     parser.add_argument("--verbose", action="store_true", default=True, help="Verbose output")
@@ -1076,97 +1076,97 @@ if __name__ == '__main__':
     parser.add_argument("--samples_per_bin", type=int, default=15, help="Number of samples to collect per bin")
 
     total_sae_paths = [
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/a6ba5747-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/ab363ace-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt", 
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/94e3805b-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/3a32d51a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_7800012.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/56d1ab26-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/ab363ace-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/bf63f410-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/db83f121-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/d907025a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/af68edb8-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/28ec4b96-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/1a39f763-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/22dca4ec-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/9ef7b8e8-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/114f4767-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/fda9e414-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/5252bc6e-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/6a138a20-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/59e1f177-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/83c140bb-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/d38623a4-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/bd303dd0-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/223bf758-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/83c140bb-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/9c059a2a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/ff7ab782-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/f514d05d-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/ff65f73a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/620eb161-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/1d7618a9-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/5e3210c6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/73ceebda-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/3fab5610-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/8a414224-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/56d59f69-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/13b6f055-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/63406ba2-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/708c90d9-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/04e3ed1b-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/65eb3a6e-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/66b0c8d7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/d5ceb0cf-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/461cc8d6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/4e03914d-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/04e3ed1b-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/4addbda6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/55b1e870-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/8df4fa8f-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/b9db1c7e-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/071c1685-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/f02e630c-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/eaf339d7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/60c3996a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/2413e6b3-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/8b55b20a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/3bcfb64c-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/479a7895-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/486a0773-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/d93798b6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/dc6936e7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/3fe6b804-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/5a049fac-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/abdf6c56-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/2f3ca24a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/ebdc1bb3-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/38c9fccb-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/cc914f28-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/0197e57d-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/cc619a60-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/0ba5f368-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/0b57d282-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/afb41428-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/47d37623-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/4cee1e18-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/98fb20f7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/abfba51c-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/98d43fdd-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/bed22fdf-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/d75890ba-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/ea58200a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/eb1b4b72-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/78834fc6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/77257359-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/5279f36d-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/a36a9d1b-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/90a626d9-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/ea58200a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/9ea217c7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/b7182c0e-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/25e63bd0-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
-    "/network/scratch/s/sonia.joseph/checkpoints/clip-b/b16677fa-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt"
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/a6ba5747-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/ab363ace-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt", 
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/94e3805b-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/3a32d51a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_7800012.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/56d1ab26-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/ab363ace-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/bf63f410-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/db83f121-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/d907025a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/af68edb8-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/28ec4b96-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/1a39f763-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/22dca4ec-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/9ef7b8e8-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/114f4767-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/fda9e414-clip_b_mlp_out_sae_hyperparam_sweep/n_images_5200035.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/5252bc6e-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/6a138a20-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/59e1f177-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/83c140bb-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/d38623a4-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/bd303dd0-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/223bf758-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/83c140bb-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/9c059a2a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/ff7ab782-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/f514d05d-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/ff65f73a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/620eb161-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/1d7618a9-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/5e3210c6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/73ceebda-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/3fab5610-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/8a414224-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/56d59f69-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/13b6f055-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/63406ba2-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/708c90d9-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/04e3ed1b-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/65eb3a6e-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/66b0c8d7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/d5ceb0cf-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/461cc8d6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/4e03914d-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/04e3ed1b-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/4addbda6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/55b1e870-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/8df4fa8f-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/b9db1c7e-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/071c1685-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/f02e630c-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/eaf339d7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/60c3996a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/2413e6b3-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/8b55b20a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/3bcfb64c-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/479a7895-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/486a0773-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/d93798b6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/dc6936e7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/3fe6b804-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/5a049fac-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/abdf6c56-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/2f3ca24a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/ebdc1bb3-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/38c9fccb-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/cc914f28-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/0197e57d-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/cc619a60-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/0ba5f368-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/0b57d282-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/afb41428-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/47d37623-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/4cee1e18-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/98fb20f7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/abfba51c-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/98d43fdd-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/bed22fdf-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/d75890ba-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/ea58200a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/eb1b4b72-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/78834fc6-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/77257359-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/5279f36d-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/a36a9d1b-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/90a626d9-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/ea58200a-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/9ea217c7-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/b7182c0e-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/25e63bd0-clip_b_mlp_out_sae_hyperparam_sweep/n_images_2600058.pt",
+    "/network/scratch/s/firstname.joseph/checkpoints/clip-b/b16677fa-clip_b_mlp_out_sae_hyperparam_sweep/n_images_3900047.pt"
 ]
 
     args = parser.parse_args()

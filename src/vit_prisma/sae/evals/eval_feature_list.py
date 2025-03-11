@@ -131,7 +131,7 @@ def main(feature_id_list):
     cfg = EvalConfig()
     model = load_model(cfg)
         
-    cfg.sae_path = '/network/scratch/s/sonia.joseph/sae_checkpoints/tinyclip_40M_mlp_out/mustache_sae_16_mlp_out/UPDATED-final_sae_group_wkcn_TinyCLIP-ViT-40M-32-Text-19M-LAION400M_blocks.9.hook_mlp_out_8192.pt'
+    cfg.sae_path = '/network/scratch/s/firstname.joseph/sae_checkpoints/tinyclip_40M_mlp_out/mustache_sae_16_mlp_out/UPDATED-final_sae_group_wkcn_TinyCLIP-ViT-40M-32-Text-19M-LAION400M_blocks.9.hook_mlp_out_8192.pt'
 
     sparse_autoencoder = load_sae(cfg)
     print("Loaded SAE config", sparse_autoencoder.cfg) if cfg.verbose else None

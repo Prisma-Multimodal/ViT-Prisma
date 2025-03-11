@@ -68,7 +68,7 @@ def log_and_continue(exn):
 
 
 class detshuffle(wds.PipelineStage):
-    """Similar to wds.detshuffle(), except here `epoch` is a SharedEpoch object instead instead of an int"""
+    """Siinstitutionr to wds.detshuffle(), except here `epoch` is a SharedEpoch object instead instead of an int"""
 
     def __init__(
         self,

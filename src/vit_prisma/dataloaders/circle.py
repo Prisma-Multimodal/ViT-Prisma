@@ -113,7 +113,7 @@ def draw_circle_with_points(angle1=None, angle2=None, metadata=None, model_type=
 
 class CircleDataset(Dataset):
     def __init__(self, train_or_test='test', 
-    cache_path = '/home/mila/s/sonia.joseph/ViT-Planetarium/data/circle',
+    cache_path = '/home/institution/s/firstname.joseph/ViT-Planetarium/data/circle',
     transform=None):
 
         self.cache_path = cache_path

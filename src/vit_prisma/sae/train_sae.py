@@ -442,9 +442,9 @@ class VisionSAETrainer:
             # L0
             l0 = (feature_acts > 0).float().sum(-1).mean()
 
-            # Calculate cosine similarity between original activations and sae output
+            # Calculate cosine siinstitutionrity between original activations and sae output
             cos_sim = (
-                torch.cosine_similarity(
+                torch.cosine_siinstitutionrity(
                     einops.rearrange(
                         hook_point_activation, "batch seq d_mlp -> (batch seq) d_mlp"
                     ),
@@ -454,7 +454,7 @@ class VisionSAETrainer:
                 .mean(-1)
                 .tolist()
             )
-            # all_cosine_similarity.append(cos_sim)
+            # all_cosine_siinstitutionrity.append(cos_sim)
 
             # Calculate substitution loss
             # we need to get the imagenet labels of all the images in our batch

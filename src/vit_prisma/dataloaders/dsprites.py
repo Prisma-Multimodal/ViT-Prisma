@@ -6,7 +6,7 @@ import os
 
 
 class DSpritesDataset(Dataset):
-    def __init__(self, data_path= '/network/scratch/s/sonia.joseph/datasets/dsprites.npz'):
+    def __init__(self, data_path= '/network/scratch/s/firstname.joseph/datasets/dsprites.npz'):
         # Load the dataset
         data = np.load(data_path, allow_pickle=True, encoding='latin1')
 

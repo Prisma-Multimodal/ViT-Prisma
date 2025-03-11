@@ -29,7 +29,7 @@ parser.add_argument(
     "--folder",
     type=str,
     help="location to save submitit logs",
-    default="/checkpoint/soniajoseph/jobs",
+    default="/checkpoint/firstnamejoseph/jobs",
 )
 parser.add_argument("--exclude", type=str, help="nodes to exclude from training", default=None)
 parser.add_argument(

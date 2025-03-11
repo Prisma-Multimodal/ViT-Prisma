@@ -26,7 +26,7 @@ from transformers import CLIPVisionModelWithProjection
 #         'kandinsky-community/kandinsky-2-1-prior',
 #         subfolder='image_encoder',
 #         torch_dtype=dtype,
-#         cache_dir = '/network/scratch/s/sonia.joseph/diffusion'
+#         cache_dir = '/network/scratch/s/firstname.joseph/diffusion'
 #     ).to("cuda")
 
 #     hooked_model = HookedViT.from_pretrained('kandinsky', is_timm=False, is_clip=True, fold_ln=False, center_writing_weights=False).to(dtype) # in future, do all models
@@ -84,7 +84,7 @@ def test_loading_kandinsky():
         'kandinsky-community/kandinsky-2-1-prior',
         subfolder='image_encoder',
         torch_dtype=dtype,
-        cache_dir='/network/scratch/s/sonia.joseph/diffusion'
+        cache_dir='/network/scratch/s/firstname.joseph/diffusion'
     ).to(device)
     original_model.eval()
 

@@ -207,16 +207,16 @@ def visualize_top_activations(
 
 @dataclass
 class EvalConfig(VisionModelSAERunnerConfig):
-    # sae_path: str = '/network/scratch/s/sonia.joseph/sae_checkpoints/1f89d99e-wkcn-TinyCLIP-ViT-40M-32-Text-19M-LAION400M-expansion-16/n_images_520028.pt'
+    # sae_path: str = '/network/scratch/s/firstname.joseph/sae_checkpoints/1f89d99e-wkcn-TinyCLIP-ViT-40M-32-Text-19M-LAION400M-expansion-16/n_images_520028.pt'
     model_name: str = "wkcn/TinyCLIP-ViT-40M-32-Text-19M-LAION400M"
     model_type: str =  "clip"
     patch_size: str = 32
 
-    save_directory = "/network/scratch/s/sonia.joseph/sae_checkpoints/neuron_basis"
+    save_directory = "/network/scratch/s/firstname.joseph/sae_checkpoints/neuron_basis"
 
-    dataset_path = "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets"
-    dataset_train_path: str = "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train"
-    dataset_val_path: str = "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val"
+    dataset_path = "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets"
+    dataset_train_path: str = "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/train"
+    dataset_val_path: str = "/network/scratch/s/firstname.joseph/datasets/kaggle_datasets/ILSVRC/Data/CLS-LOC/val"
 
     verbose: bool = True
 
@@ -252,7 +252,7 @@ if __name__ == "__main__":
 
 
      # Load npy file for neuron indices
-    indices_path = '/home/mila/s/sonia.joseph/CLIP_AUDIT/clip_audit/saved_data/tinyclip_neuron_indices_mlp_out.npy'
+    indices_path = '/home/institution/s/firstname.joseph/CLIP_AUDIT/clip_audit/saved_data/tinyclip_neuron_indices_mlp_out.npy'
     neuron_indices_dictionary = np.load(indices_path, allow_pickle=True).item()
     neuron_indices = neuron_indices_dictionary[cfg.hook_point_layer]
     print("Neuron indices are length: ", len(neuron_indices), "for layer: ", cfg.hook_point_layer)

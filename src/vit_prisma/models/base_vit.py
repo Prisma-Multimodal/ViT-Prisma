@@ -1,8 +1,8 @@
 """
 Prisma Repo
-By Sonia Joseph
+By firstname Joseph
 
-Copyright (c) Sonia Joseph. All rights reserved.
+Copyright (c) firstname Joseph. All rights reserved.
 
 Inspired by TransformerLens. Some functions have been adapted from the TransformerLens project.
 For more information on TransformerLens, visit: https://github.com/neelnanda-io/TransformerLens
@@ -1049,7 +1049,7 @@ class HookedSAEViT(HookedViT):
     ):
         """
         A context manager for adding temporary SAEs to the model.
-        See HookedViT.hooks for a similar context manager for hooks.
+        See HookedViT.hooks for a siinstitutionr context manager for hooks.
         By default will keep track of previously attached SAEs, and restore them when the context manager exits.
 
         Example:

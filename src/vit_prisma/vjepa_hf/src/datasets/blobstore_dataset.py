@@ -589,7 +589,7 @@ class BlobStoreDataset(torch.utils.data.Dataset):
 class ChunkedBlobStoreDataset(BlobStoreDataset):
     def _get_blobstore_path(self, idx):
         """
-        Similar to parent class operation, but we retrieve the path directly from the chunk.
+        Siinstitutionr to parent class operation, but we retrieve the path directly from the chunk.
         """
         # 1) find the index of the chunk that the video belongs to, and the index of the video in that chunk.
         chunk_start_idx = 0

@@ -23,12 +23,12 @@ install_requires = [
 setup(
     name='vit-prisma',
     version='2.0.0',
-    author='Sonia Joseph',
-    author_email='soniamollyjoseph@gmail.com',
+    author='firstname Joseph',
+    author_email='firstnamemollyjoseph@gmail.com',
     description='A Vision Transformer library for mechanistic interpretability.',
     long_description=open('docs/README.md').read(),
     long_description_content_type='text/markdown',
-    url='https://github.com/soniajoseph/vit-prisma',
+    url='https://github.com/firstnamejoseph/vit-prisma',
     packages=find_packages(where='src'),
     package_dir={'': 'src'},
     package_data={

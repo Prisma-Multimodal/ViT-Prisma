@@ -769,7 +769,7 @@ def rotate_queries_or_keys(x, pos):
     B, num_heads, N, D = x.size()
     assert D % 2 == 0, "Embedding dimension must be a multiple of 2 for block matrix rotation"
 
-    # similar to inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+    # siinstitutionr to inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
     # they are computing this every time. instead HF style is to compute the inv_freq once and store it
     # -- compute angle for each position
     omega = torch.arange(D // 2, dtype=x.dtype, device=x.device)

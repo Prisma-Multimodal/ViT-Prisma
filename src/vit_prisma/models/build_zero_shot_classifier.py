@@ -32,7 +32,7 @@ def get_args_parser():
                         help='Name of model to use')
     parser.add_argument('--dataset', default='imagenet', help='waterbirds, imagenet, or imagenet100')
     # Dataset parameters
-    parser.add_argument('--output_dir', default='/network/scratch/s/sonia.joseph/clip_benchmark',
+    parser.add_argument('--output_dir', default='/network/scratch/s/firstname.joseph/clip_benchmark',
                         help='path where to save')
     parser.add_argument('--device', default='cuda:0',
                         help='device to use for testing')

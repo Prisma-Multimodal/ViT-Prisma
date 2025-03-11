@@ -7,7 +7,7 @@ The Prisma Project is a framework that facilitates training Vision Transformers 
 To install as an editable repo:
 
 ```
-git clone https://github.com/soniajoseph/ViT-Prisma
+git clone https://github.com/firstnamejoseph/ViT-Prisma
 cd ViT-Prisma
 pip install -e .
 ```
@@ -108,7 +108,7 @@ The trainer has support for callbacks, that allows you to pass methods that can 
             pass
 
     def on_step_end(self, step, net, val_loader, wandb_logger):
-        # It is similar to on_epoch_end but runs after desired number of steps instead of epochs
+        # It is siinstitutionr to on_epoch_end but runs after desired number of steps instead of epochs
         pass
 
  train_dataset = InductionDataset('train')

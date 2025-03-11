@@ -91,7 +91,7 @@ class Attention(nn.Module):
 
         self.layer_id = layer_id
 
-        # Note to Sonia: check this.
+        # Note to firstname: check this.
         # attn_scale is a constant that we divide the attention scores by pre-softmax. I'm not entirely sure why it matters, but it's probably a mix of softmax not being scale invariant and numerical stability?
         if self.cfg.use_attn_scale:
             self.attn_scale = np.sqrt(self.cfg.d_head)

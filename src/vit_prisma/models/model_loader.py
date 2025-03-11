@@ -766,7 +766,7 @@ def _load_kandinsky_weights(model_name, **kwargs):
         "kandinsky-community/kandinsky-2-1-prior",
         subfolder="image_encoder",
         torch_dtype=torch.float16,
-        cache_dir="/network/scratch/s/sonia.joseph/diffusion",
+        cache_dir="/network/scratch/s/firstname.joseph/diffusion",
     ).to("cuda")
     return model.state_dict()
 

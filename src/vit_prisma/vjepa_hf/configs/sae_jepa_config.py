@@ -15,7 +15,7 @@ class JEPABaseConfig(VisionModelSAERunnerConfig):
 
     model_name: str = "vjepa_v1_vit_huge"
     # model_name = "wkcn/TinyCLIP-ViT-40M-32-Text-19M-LAION400M"
-    checkpoint_path: str = "/checkpoint/soniajoseph" # meta cluster
+    checkpoint_path: str = "/checkpoint/firstnamejoseph" # meta cluster
     wandb_project: str = "vjepa_l_sae"
 
     d_in: int = 1280
@@ -68,4 +68,4 @@ class JEPABaseConfig(VisionModelSAERunnerConfig):
 
         print("Running with CLIP Base Config")
 
-#/home/mila/s/sonia.joseph/SAE_factory/src/SAE_factory/quick_train/run_sweep_clip.py --hook_point_layer=9 --l1_coefficient=0.8011371355363572 --lr=0.000292136313548604 --train_batch_size=4096
+#/home/institution/s/firstname.joseph/SAE_factory/src/SAE_factory/quick_train/run_sweep_clip.py --hook_point_layer=9 --l1_coefficient=0.8011371355363572 --lr=0.000292136313548604 --train_batch_size=4096

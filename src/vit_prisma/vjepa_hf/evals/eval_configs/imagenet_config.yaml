@@ -26,7 +26,7 @@ pretrain:
   use_xformers: false
   use_sdpa: false
   patch_size: 16
-  folder: "/checkpoint/soniajoseph/v1_vit_huge_conv/"
+  folder: "/checkpoint/firstnamejoseph/v1_vit_huge_conv/"
   write_tag: jepa
   
 
@@ -36,7 +36,7 @@ pretrain:
 #         'checkpoint_key': 'target_encoder',
 #         'model_name': 'vit_huge',
 #         'patch_size': 16,
-#         'folder':  "/checkpoint/soniajoseph/v1_vit_huge_conv/",
+#         'folder':  "/checkpoint/firstnamejoseph/v1_vit_huge_conv/",
 #         'ckp_fname': 'model_checkpoint.pth',
 #         'tag': 'my_model_tag',
 #         'use_sdpa': True,

@@ -1,6 +1,6 @@
 vjepa_v1_vit_huge: 
-  loc: "/checkpoint/soniajoseph/v1_vit_huge_conv/"
+  loc: "/checkpoint/firstnamejoseph/v1_vit_huge_conv/"
 vjepa_v1_vit_huge_384: 
-  loc: "/checkpoint/soniajoseph/v1_vith16_384_hf/"
+  loc: "/checkpoint/firstnamejoseph/v1_vith16_384_hf/"
 vjepa_v1.5_vit_g_256: 
-  loc: "/checkpoint/soniajoseph/vm2myt1bin1k-16fpc-vitg16-256px-local-ropev2/hf/"
+  loc: "/checkpoint/firstnamejoseph/vm2myt1bin1k-16fpc-vitg16-256px-local-ropev2/hf/"
