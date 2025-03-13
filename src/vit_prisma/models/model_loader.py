@@ -149,6 +149,11 @@ FAILING_MODELS = {
 # Core Model Loading Functions
 # ===============================
 
+# create logger
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 
 def load_config(
@@ -172,7 +177,7 @@ def load_config(
     
     if model_type == ModelType.TEXT and model_name not in TEXT_SUPPORTED_MODELS:
         raise ValueError(f"Model '{model_name}' does not support text modality")
-    
+        
     category = MODEL_CATEGORIES[model_name]
     
     # Get dynamic config from source
@@ -192,7 +197,8 @@ def load_config(
     elif category == ModelCategory.VJEPA:
         new_config = create_config_object(model_name, model_type)
     else:
-        raise ValueError(f"Unsupported model category: {category}")
+        new_config = create_config_object(model_name, model_type)
+        logger.warning("Unsupported model category: {category}")
     
     # Apply registry overrides
     registry_overrides = MODEL_CONFIGS[model_type].get(model_name, {})

@@ -151,28 +151,10 @@ def evaluate_imagenet_probe(encoder, val_loader, probe, device='cuda', use_bfloa
 
                 # Get representations
                 features = encoder(images)
-                # features = features.to(torch.float32)
-                # features = features.mean(dim=1).unsqueeze(1)
-
-             
-
-
-                # # normalize along 1 and second dimension
-                # features = F.normalize(features, p=2, dim=1)
-
-                # # try random features
-                # features = torch.randn(16, 1568, 1024).to(DEVICE)
-
-
-
                 output = probe(features)
 
                 # Measure accuracy
                 (acc1, acc5), top1_preds, top5_preds = accuracy(output, target, topk=(1, 5))
-                print("\n🔥 True Labels:", target.tolist())
-                print("🔥 Top-1 Predictions:", top1_preds.tolist())
-                print("🔥 Top-5 Predictions:", top5_preds.tolist())
-
 
             
             top1.update(acc1, images.size(0))
@@ -289,24 +271,24 @@ transform = transforms.Compose([
 
 classifier_model_library = { # model_name: (model_path, probe_path)
     'vjepa_v1_vit_large_patch16': ('/network/scratch/s/sonia.joseph/jepa_models/github_models/vit-l-16/vitl16.pth.tar', '/network/scratch/s/sonia.joseph/jepa_models/github_models/vit-l-16/probes/in1k-probe.pth.tar.1'),
-    'vjepa_v1_vit_huge_patch16_224': ('/network/scratch/s/sonia.joseph/jepa_models/github_models/vit-h-16/vith16.pth.tar', '/network/scratch/s/sonia.joseph/jepa_models/github_models/vit-h-16/probes/in1k-probe.pth.tar')
+    'vjepa_v1_vit_huge_patch16': ('/network/scratch/s/sonia.joseph/jepa_models/github_models/vit-h-16/vith16.pth.tar', '/network/scratch/s/sonia.joseph/jepa_models/github_models/vit-h-16/probes/in1k-probe.pth.tar')
 
 }
 
-sae_cfg = VisionModelSAERunnerConfig().load_config('jepa_l_config.json')
 
 
-model_name = 'vjepa_v1_vit_large_patch16'
+model_name = 'vjepa_v1_vit_huge_patch16'
 
 model_path, probe_path = classifier_model_library[model_name]
-encoder = load_hooked_model(model_name, local_path = model_path, pretrained=False)
+# encoder = load_hooked_model(model_name, local_path = model_path, pretrained=False)
+encoder = load_model(model_name, model_path)
 
-if encoder.cfg.video_num_frames > 1:
-    def forward_prehook(module, input):
-        input = input[0]  # [B, C, H, W]
-        input = input.unsqueeze(2).repeat(1, 1, encoder.cfg.video_num_frames, 1, 1)
-        return (input)
-encoder.register_forward_pre_hook(forward_prehook)
+# def forward_prehook(module, input):
+#     input = input[0]  # [B, C, H, W]
+#     print(input.shape)
+#     input = input.unsqueeze(2).repeat(1, 1,16, 1, 1)
+#     return (input)
+# encoder.register_forward_pre_hook(forward_prehook)
 
 encoder = encoder.to(DEVICE)
 
@@ -320,13 +302,15 @@ val_data_path = "/network/scratch/s/sonia.joseph/datasets/kaggle_datasets/ILSVRC
 train_data = ImageFolder(root=train_data_path, transform=transform)
 val_data = ImageFolder(root=val_data_path, transform=transform)
 
+# sae_cfg = VisionModelSAERunnerConfig().load_config('jepa_l_config.json')
 
-trainer = VisionSAETrainer(sae_cfg, encoder, train_data, val_data)
 
-trainer.run()
+# trainer = VisionSAETrainer(sae_cfg, encoder, train_data, val_data)
 
-# val_loader = DataLoader(train_data, batch_size=16, shuffle=True, num_workers=4)
+# trainer.run()
 
-# top1_acc, top5_acc = evaluate_imagenet_probe(encoder, val_loader, classifier)
-# print(f'Top-1 Accuracy: {top1_acc:.2f}')
-# print(f'Top-5 Accuracy: {top5_acc:.2f}')
+val_loader = DataLoader(train_data, batch_size=16, shuffle=True, num_workers=4)
+
+top1_acc, top5_acc = evaluate_imagenet_probe(encoder, val_loader, classifier)
+print(f'Top-1 Accuracy: {top1_acc:.2f}')
+print(f'Top-5 Accuracy: {top5_acc:.2f}')
