@@ -629,7 +629,7 @@ VJEPA_CONFIGS = {
         "video_tubelet_depth": 2,
         "video_num_frames": 16,
         "patch_size": 16,
-        "n_heads": 20,
+        "n_heads": 16,
         "d_model": 1280,
         "n_layers": 32,
         "is_video_transformer": True,

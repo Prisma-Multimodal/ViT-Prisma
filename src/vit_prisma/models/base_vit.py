@@ -176,6 +176,7 @@ class HookedViT(HookedTransformer):
 
         pos_embed = self.hook_pos_embed(self.pos_embed(input))
 
+
         residual = embed + pos_embed
 
         self.hook_full_embed(residual)

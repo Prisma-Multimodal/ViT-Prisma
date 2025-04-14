@@ -59,7 +59,7 @@ def vit_large(patch_size=16, **kwargs):
 
 def vit_huge(patch_size=16, **kwargs):
     model = VisionTransformer(
-        patch_size=patch_size, embed_dim=1280, depth=32, num_heads=20, mlp_ratio=4,
+        patch_size=patch_size, embed_dim=1280, depth=32, num_heads=16, mlp_ratio=4,
         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), use_sdpa=True, **kwargs)
     return model
 
@@ -193,7 +193,7 @@ def load_attentive_probe(encoder, probe_path):
     except:
         num_heads = encoder.cfg.n_heads
 
-
+    print(f"Embed dim: {embed_dim}, Num heads: {num_heads}")
 
     classifier = AttentiveClassifier(embed_dim= embed_dim ,num_heads = num_heads, depth=1, num_classes=1000).to(DEVICE)
 
@@ -225,6 +225,7 @@ def load_model(model_name, path):
     if 'vit_large' in model_name:
         encoder = vit_large(tubelet_size=2, num_frames=16)
     elif 'vit_huge' in model_name:
+        print('loading huge')
         encoder = vit_huge(tubelet_size=2, num_frames=16)
     # encoder = VisionTransformer(
     #     patch_size=16, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4, uniform_power=True,
@@ -277,11 +278,13 @@ classifier_model_library = { # model_name: (model_path, probe_path)
 
 
 
+# model_name = 'vjepa_v1_vit_large_patch16'
 model_name = 'vjepa_v1_vit_huge_patch16'
 
 model_path, probe_path = classifier_model_library[model_name]
-# encoder = load_hooked_model(model_name, local_path = model_path, pretrained=False)
 encoder = load_model(model_name, model_path)
+
+# encoder = load_hooked_model(model_name, local_path = model_path, pretrained=False)
 
 # def forward_prehook(module, input):
 #     input = input[0]  # [B, C, H, W]
@@ -291,7 +294,6 @@ encoder = load_model(model_name, model_path)
 # encoder.register_forward_pre_hook(forward_prehook)
 
 encoder = encoder.to(DEVICE)
-
 
 
 classifier = load_attentive_probe(encoder, probe_path)
