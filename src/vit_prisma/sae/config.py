@@ -32,7 +32,7 @@ class RunnerConfig(ABC):
     # SAE Parameters
     d_in: int = 512
     activation_fn_str: str = "relu"  # relu or topk
-    activation_fn_kwargs: dict[str, Any] = field(default_factory=dict)
+    activation_fn_kwargs: dict = field(default_factory=dict)
     cls_token_only: bool = False  # use only CLS token in training
 
     # SAE Training run tolerance
@@ -59,7 +59,7 @@ class RunnerConfig(ABC):
     image_size: int = 224
 
     # Misc
-    device: str | torch.device = "cpu"
+    device: str = "cuda"
     seed: int = 42
     dtype: torch.dtype = torch.float32
 
@@ -116,6 +116,14 @@ class VisionModelSAERunnerConfig(RunnerConfig):
     lr_warm_up_steps: int = 500
 
     train_batch_size: int = 1024 * 4
+
+    # Transcoder Parameters
+    is_transcoder: bool = False
+    transcoder_with_skip_connection: bool = False
+    out_hook_point_layer: int = 9
+    layer_out_subtype: str = "hook_mlp_out"
+    d_out: int = 768
+
 
     # Imagenet1k
     dataset_name: str = "imagenet1k"

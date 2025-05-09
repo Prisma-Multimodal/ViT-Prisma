@@ -245,6 +245,7 @@ def get_text_embeddings_openclip(vanilla_model, processor, tokenizer, original_t
 
     for batch in text_batches:
         inputs = tokenizer(batch)
+        inputs = inputs.to('cuda')
         # inputs = {k: v.to(cfg.device) for k, v in inputs.items()}
         with torch.no_grad():
             text_embeddings = vanilla_model.encode_text(inputs)
@@ -369,7 +370,7 @@ def get_similarity(image_features, text_features, k=5, device='cuda'):
 
   softmax_values = (image_features @ text_features.T).softmax(dim=-1)
   top_k_values, top_k_indices = torch.topk(softmax_values, k, dim=-1)
-  print(f"top_k_values: {top_k_values}")
+
   return softmax_values, top_k_indices
 
 def get_text_labels(name='wordbank'):
