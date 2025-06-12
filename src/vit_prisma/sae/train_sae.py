@@ -40,6 +40,7 @@ import uuid
 import wandb
 
 
+
 def wandb_log_suffix(cfg: Any, hyperparams: Any):
     # Create a mapping from cfg list keys to their corresponding hyperparams attributes
     key_mapping = {
