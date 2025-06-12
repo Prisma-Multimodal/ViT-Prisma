@@ -85,6 +85,24 @@ For more details, see our whitepaper.
 | [link](https://huggingface.co/Prisma-Multimodal/imagenet-sweep-vanilla-x64-Spatial_max_9-hook_resid_post-854.891540527344-99)  | 9     | resid_post | 9e-8      | 99               | 854.92   | 0.99    | 1.00           | 6.7622 | 6.7622    | 6.9083       | 99.9991        | 85.43            |
 | [link](https://huggingface.co/Prisma-Multimodal/imagenet-sweep-vanilla-x64-Spatial_max_11-hook_resid_post-829.0498046875-99)   | 11    | resid_post | 3e-7      | 99               | 829.09   | 0.99    | 1.00           | 6.7622 | 6.7622    | 6.9086       | 100.00         | 55.71            |
 
+## Top K Transcoders (All Patches)
+
+*CLIP Top-K transcoder performance metrics for all patches.*
+
+| Model                                                                 | Layer | Block | % Explained var. | k    | Avg CLS L0 | Cos sim | CE     | Recon CE | Zero abl CE | % CE recovered |
+|-----------------------------------------------------------------------|-------|-------|------------------|------|------------|---------|--------|----------|-------------|----------------|
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-768-x64-all_patches_0-mlp-96)  | 0     | MLP   | 96               | 768  | 767        | 0.9655  | 6.7621 | 6.7684   | 6.8804      | 94.68          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-256-x64-all_patches_1-mlp-94)  | 1     | MLP   | 94               | 256  | 255        | 0.9406  | 6.7621 | 6.7767   | 6.8816      | 87.78          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-1024-x64-all_patches_2-mlp-93) | 2     | MLP   | 93               | 1024 | 475        | 0.9758  | 6.7621 | 6.7681   | 6.7993      | 83.92          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-1024-x64-all_patches_3-mlp-90) | 3     | MLP   | 90               | 1024 | 825        | 0.9805  | 6.7621 | 6.7642   | 6.7999      | 94.42          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-512-x64-all_patches_4-mlp-76)  | 4     | MLP   | 76               | 512  | 29         | 0.9830  | 6.7621 | 6.7636   | 6.8080      | 96.76          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-1024-x64-all_patches_5-mlp-91) | 5     | MLP   | 91               | 1024 | 1017       | 0.9784  | 6.7621 | 6.7643   | 6.8296      | 96.82          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-1024-x64-all_patches_6-mlp-94) | 6     | MLP   | 94               | 1024 | 924        | 0.9756  | 6.7621 | 6.7630   | 6.8201      | 98.40          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-1024-x64-all_patches_7-mlp-97) | 7     | MLP   | 97               | 1024 | 1010       | 0.9629  | 6.7621 | 6.7631   | 6.8056      | 97.68          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-1024-x64-all_patches_8-mlp-98) | 8     | MLP   | 98               | 1024 | 1023       | 0.9460  | 6.7621 | 6.7630   | 6.8017      | 97.70          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-1024-x64-all_patches_9-mlp-98) | 9     | MLP   | 98               | 1024 | 1023       | 0.9221  | 6.7621 | 6.7630   | 6.7875      | 96.50          |
+| [link](https://huggingface.co/Prisma-Multimodal/CLIP-transcoder-topk-1024-x64-all_patches_10-mlp-97)| 10    | MLP   | 97               | 1024 | 1019       | 0.9334  | 6.7621 | 6.7636   | 6.7860      | 93.95          |
+
 # DINO-B-32 Sparse Autoencoder Performance
 
 ## Vanilla SAEs (All Patches)

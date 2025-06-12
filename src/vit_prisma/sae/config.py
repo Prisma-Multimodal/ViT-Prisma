@@ -44,8 +44,6 @@ dtype_mapping = {
     "torch.bool": torch.bool,
 }
 
-
-
 @dataclass
 class VisionModelSAERunnerConfig:
     """
