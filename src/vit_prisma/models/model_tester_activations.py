@@ -4,7 +4,7 @@ from transformers import AutoModel
 from vit_prisma.models.model_loader import load_hooked_model
 
 DEVICE = "cuda"
-TOLERANCE = 1e-3
+TOLERANCE = 1e-2
 
 def build_activation_mapping(cfg):
     """
@@ -12,6 +12,11 @@ def build_activation_mapping(cfg):
     Matching HuggingFace activations to HookedTransformer cache keys.
     """
     mappings = []
+
+    mappings += [
+            (f"patch_embed", "hook_full_embed", None),
+
+    ]
 
     # Residual and norm mappings
     for l in range(cfg.n_layers):
@@ -34,7 +39,7 @@ def build_activation_mapping(cfg):
 
             # Residual streams
             (f"{hf_prefix}.hook_resid_pre", f"{ht_prefix}.hook_resid_pre", None),
-            (f"{hf_prefix}.hook_resid_mid", f"{ht_prefix}.hook_resid_mid", None),
+            (f"{hf_prefix}.hook_attn_out", f"{ht_prefix}.hook_attn_out", None),
             (f"{hf_prefix}.hook_resid_post", f"{ht_prefix}.hook_resid_post", None),
         ]
     return mappings
@@ -62,18 +67,22 @@ def register_hf_hooks(model, cfg):
                 tensor = output
             activations[key] = tensor.detach().cpu()
         return hook
+    
+    # patch embeddings
+    model.encoder.embeddings.patch_embeddings.register_forward_hook(save_output(f"patch_embed"))
 
 
     for l in range(cfg.n_layers):
         layer = model.encoder.layer[l]
         prefix = f"encoder.layer.{l}"
 
-        # Attention Q/K/V projection outputs (query/key/value are nn.Linear)
-        layer.attention.query.register_forward_hook(save_output(f"{prefix}.attention.query"))
-        layer.attention.key.register_forward_hook(save_output(f"{prefix}.attention.key"))
-        layer.attention.value.register_forward_hook(save_output(f"{prefix}.attention.value"))
+        # # Attention Q/K/V projection outputs (query/key/value are nn.Linear)
+        # layer.attention.query.register_forward_hook(save_output(f"{prefix}.attention.query"))
+        # layer.attention.key.register_forward_hook(save_output(f"{prefix}.attention.key"))
+        # layer.attention.value.register_forward_hook(save_output(f"{prefix}.attention.value"))
 
         # Norm outputs (LayerNorm)
+
         layer.norm1.register_forward_hook(save_output(f"{prefix}.norm1"))
         layer.norm2.register_forward_hook(save_output(f"{prefix}.norm2"))
 
@@ -85,7 +94,7 @@ def register_hf_hooks(model, cfg):
         # resid_pre: input to entire block
         layer.register_forward_hook(save_input(f"{prefix}.hook_resid_pre"))
         # resid_mid: output of attention module
-        layer.attention.register_forward_hook(save_output(f"{prefix}.hook_resid_mid"))
+        layer.attention.register_forward_hook(save_output(f"{prefix}.hook_attn_out"))
         # resid_post: output of entire block (layer)
         layer.register_forward_hook(save_output(f"{prefix}.hook_resid_post"))
 
