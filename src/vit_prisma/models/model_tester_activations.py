@@ -30,7 +30,7 @@ def build_activation_mapping(cfg):
 
             # MLP layers
             (f"{hf_prefix}.mlp.fc1", f"{ht_prefix}.mlp.hook_pre", None),
-            (f"{hf_prefix}.mlp.fc2", f"{ht_prefix}.mlp.hook_post", None),
+            (f"{hf_prefix}.mlp.fc2", f"{ht_prefix}.hook_mlp_out", None),
 
             # Residual streams
             (f"{hf_prefix}.hook_resid_pre", f"{ht_prefix}.hook_resid_pre", None),
@@ -89,7 +89,7 @@ def register_hf_hooks(model, cfg):
         # resid_post: output of entire block (layer)
         layer.register_forward_hook(save_output(f"{prefix}.hook_resid_post"))
 
-    return activations
+    return activations 
 
 
 def compare_activations(hf_acts, ht_cache, mapping, cfg):
@@ -165,6 +165,7 @@ def run_comparison(model_name, input_image):
     # Build mapping
     mapping = build_activation_mapping(cfg)
 
+    print(ht_cache)
     # Compare activations
     compare_activations(hf_activations, ht_cache, mapping, cfg)
 
