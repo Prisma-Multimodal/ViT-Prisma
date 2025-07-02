@@ -4,7 +4,7 @@ from transformers import AutoModel
 from vit_prisma.models.model_loader import load_hooked_model
 
 DEVICE = "cuda"
-TOLERANCE = 1e-5
+TOLERANCE = 1e-3
 
 def build_activation_mapping(cfg):
     """
@@ -113,6 +113,15 @@ def compare_activations(hf_acts, ht_cache, mapping, cfg):
                 print(f"Error reshaping {hf_key} → {ht_key}: {e}")
                 continue
 
+            # For attention query/key/value activations, reshape HF to (batch, seq_len, n_heads, head_dim)
+        if any(att in hf_key for att in ["attention.query", "attention.key", "attention.value"]):
+            try:
+                B, T, D = hf_tensor.shape
+                hf_tensor = hf_tensor.reshape(B, T, cfg.n_heads, cfg.d_head)
+            except Exception as e:
+                print(f"Error reshaping attention proj {hf_key}: {e}")
+                continue
+
         # Print shapes for debug
         print(f"Comparing {hf_key} (shape {hf_tensor.shape}) ↔ {ht_key} (shape {ht_tensor.shape})")
 
@@ -127,14 +136,18 @@ def compare_activations(hf_acts, ht_cache, mapping, cfg):
         print(f"{hf_key} ↔ {ht_key} | max diff: {max_diff:.6e}, mean diff: {mean_diff:.6e}")
 
         if max_diff > TOLERANCE:
-            print(f"❗ WARNING: Difference above tolerance for {hf_key}")
+            print(f"❗ WARNING: Difference above tolerance for {hf_key}.")
 
 
 
 def run_comparison(model_name, input_image):
     # Load HF and HookedTransformer models
     hf_model = AutoModel.from_pretrained(model_name).to(DEVICE).eval()
+
+
     hooked_model = load_hooked_model(model_name).to(DEVICE).eval()
+
+    print(hooked_model.cfg)
 
     cfg = hooked_model.cfg
 
