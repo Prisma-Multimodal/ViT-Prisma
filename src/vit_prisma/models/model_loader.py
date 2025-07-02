@@ -454,18 +454,21 @@ def _create_config_from_hf(hf_config, model_name: str, model_type: ModelType):
     """Create a general config from HuggingFace config for any vision or text transformer."""
     if model_type == ModelType.VISION or model_type == None:  # VISION
         config = HookedViTConfig()
+        from transformers import TimmWrapperConfig
 
         # Core architecture parameters
-        config.d_model = hf_config.hidden_size
-        config.n_layers = hf_config.num_hidden_layers
-        config.n_heads = hf_config.num_attention_heads
-        config.d_head = hf_config.hidden_size // hf_config.num_attention_heads
-        config.d_mlp = hf_config.intermediate_size
+        config.d_model = hf_config.hidden_size if not isinstance(hf_config, TimmWrapperConfig) else 768
+        config.n_layers = hf_config.num_hidden_layers if not isinstance(hf_config, TimmWrapperConfig) else 12
+        config.n_heads = hf_config.num_attention_heads if not isinstance(hf_config, TimmWrapperConfig) else 12
+        config.d_head = hf_config.hidden_size // hf_config.num_attention_heads if not isinstance(hf_config,
+                                                                                                 TimmWrapperConfig) else 64
+        config.d_mlp = hf_config.intermediate_size if not isinstance(hf_config, TimmWrapperConfig) else 3072
 
         # Vision-specific parameters
         config.image_size = getattr(hf_config, "image_size", 224)
         config.n_channels = getattr(hf_config, "num_channels", 3)
         config.patch_size = getattr(hf_config, "patch_size", 16)
+        hf_config.num_classes = 1000
 
         # Handle different types of patch sizes
         if hasattr(hf_config, "tubelet_size"):
