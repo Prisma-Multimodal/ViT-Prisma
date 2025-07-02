@@ -58,6 +58,8 @@ def convert_vjepa_weights(old_state_dict, cfg):
     # Final LayerNorm
     new_state_dict["ln_final.w"] = old_state_dict["encoder.layernorm.weight"].clone()
     new_state_dict["ln_final.b"] = old_state_dict["encoder.layernorm.bias"].clone()
+
+    
     
     for layer in range(cfg.n_layers):
         layer_key = f"encoder.layer.{layer}"
@@ -87,12 +89,13 @@ def convert_vjepa_weights(old_state_dict, cfg):
             "d (h dh) -> h dh d", h=cfg.n_heads, dh=cfg.d_head
         )
 
+
+
         new_state_dict[f"{new_layer_key}.attn.W_Q"] = W_Q
         new_state_dict[f"{new_layer_key}.attn.W_K"] = W_K
         new_state_dict[f"{new_layer_key}.attn.W_V"] = W_V
         new_state_dict[f"{new_layer_key}.attn.W_O"] = W_O
 
-        # Attention biases (✔ DO NOT reshape!)
         b_Q = einops.rearrange(
             old_state_dict[f"{layer_key}.attention.query.bias"].clone(),
             "(h dh) -> h dh", h=cfg.n_heads, dh=cfg.d_head

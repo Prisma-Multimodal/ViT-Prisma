@@ -158,8 +158,18 @@ def compare_layerwise_dictionaries(model_name, input_image):
 
     hf_state = hf_model.state_dict()
     hooked_state = hooked_model.state_dict()
+    print("🔍 Post-load b_V first 10 entries (should NOT be zero):", hooked_state["blocks.23.attn.b_V"].flatten()[:10])
+
+    
+    print("Checking HF attention.proj.bias shape:", hf_state["encoder.layer.23.attention.proj.bias"].shape)
+    print("HookedTransformer b_O shape:", hooked_model.blocks[23].attn.b_O.shape)
+
+    print("HF value.bias first 10 entries:", hf_state["encoder.layer.23.attention.value.bias"][:10])
+    print("HookedTransformer b_V first 10 entries:", hooked_model.blocks[23].attn.b_V.flatten()[:10])
+
 
     cfg = hooked_model.cfg
+    
 
     mapping = build_layerwise_mapping(cfg)
 
@@ -174,21 +184,42 @@ def compare_layerwise_dictionaries(model_name, input_image):
         hf_tensor = hf_state[hf_key].detach().cpu()
         ht_tensor = hooked_state[ht_key].detach().cpu()
 
-        if reshape:
+        # Detect if this is an attention weight needing reshape (query/key/value proj weights or output proj)
+        if "attention.query.weight" in hf_key or "attention.key.weight" in hf_key or "attention.value.weight" in hf_key:
+            # HF shape: (h*dh, d), HT shape: (h, d, dh)
             try:
-                hf_tensor = reshape(hf_tensor)
+                hf_tensor_reshaped = einops.rearrange(hf_tensor, "(h dh) d -> h d dh", h=cfg.n_heads)
             except Exception as e:
                 print(f"Error reshaping {hf_key} → {ht_key}: {e}")
                 continue
+        elif "attention.proj.weight" in hf_key:
+            # HF shape: (d, h*dh), HT shape: (h, dh, d)
+            try:
+                hf_tensor_reshaped = einops.rearrange(hf_tensor, "d (h dh) -> h dh d", h=cfg.n_heads)
+            except Exception as e:
+                print(f"Error reshaping {hf_key} → {ht_key}: {e}")
+                continue
+        else:
+            # For everything else (biases, mlp, layernorms), just reshape if function given
+            if reshape:
+                try:
+                    hf_tensor_reshaped = reshape(hf_tensor)
+                except Exception as e:
+                    print(f"Error reshaping {hf_key} → {ht_key}: {e}")
+                    continue
+            else:
+                hf_tensor_reshaped = hf_tensor
 
-        if hf_tensor.shape != ht_tensor.shape:
-            print(f"Shape mismatch {hf_key} vs {ht_key}: {hf_tensor.shape} != {ht_tensor.shape}")
+        # Now check shapes
+        if hf_tensor_reshaped.shape != ht_tensor.shape:
+            print(f"Shape mismatch {hf_key} vs {ht_key}: {hf_tensor_reshaped.shape} != {ht_tensor.shape}")
             continue
 
-        diff = torch.abs(hf_tensor - ht_tensor)
+        diff = torch.abs(hf_tensor_reshaped - ht_tensor)
         max_diff = diff.max().item()
         mean_diff = diff.mean().item()
         print(f"{hf_key} ↔ {ht_key} | max diff: {max_diff:.6f}, mean diff: {mean_diff:.6f}")
+
     
     print("\n✅ Comparing final outputs on input_image:")
     with torch.no_grad():
@@ -226,4 +257,4 @@ compare_layerwise_dictionaries(model_name="facebook/vjepa2-vitl-fpc64-256", inpu
 #     if reshape_fn is not None:
 #         a = reshape_fn(a)
 #     max_diff = torch.max(torch.abs(a - b))
-#     print(f"{hf_key} vs {ht_key} → max diff {max_diff.item()}")
+#     print(f"{hf_key} vs {ht_key} → max diff {max_diff.item()}") 

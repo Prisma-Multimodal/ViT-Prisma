@@ -20,6 +20,12 @@ import torch.nn.functional as F
 
 
 
+import torch
+import torch.nn as nn
+import einops
+from typing import Optional, Tuple, Union
+
+
 class Attention(nn.Module):
 
     def __init__(
@@ -139,6 +145,8 @@ class Attention(nn.Module):
             ],
             attention_mask: Optional[Float[torch.Tensor, "batch pos pos"]] = None,
     ) -> Float[torch.Tensor, "batch pos d_model"]:
+        
+
         
         q, k, v  = self.calculate_qkv_matrices(query_input, key_input, value_input)
 
@@ -281,10 +289,32 @@ class Attention(nn.Module):
         return z
 
 
-# import torch
-# import torch.nn as nn
-# import einops
-# from typing import Optional, Tuple, Union
+def rotate_queries_or_keys(x, pos):
+    B, num_heads, N, D = x.size()
+
+    # similar to inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+    # they are computing this every time. instead HF style is to compute the inv_freq once and store it
+    # -- compute angle for each position
+    omega = torch.arange(D // 2, dtype=x.dtype, device=x.device)
+    omega /= D / 2.0
+    omega = 1.0 / 10000**omega  # (D/2,)
+    freq = torch.einsum("..., f -> ... f", pos, omega)  # (..., N, D/2), outer product
+
+    # -- build rotation matrix and apply
+    emb_sin = freq.sin()  # (..., N, D/2)
+    emb_cos = freq.cos()  # (..., N, D/2)
+
+    emb_sin = emb_sin.squeeze(-1).repeat(1, 1, 1, 2)
+    emb_cos = emb_cos.squeeze(-1).repeat(1, 1, 1, 2)
+
+    # --
+    y = x.unflatten(-1, (-1, 2))
+    y1, y2 = y.unbind(dim=-1)
+
+    y = torch.stack((-y2, y1), dim=-1)
+    y = y.flatten(-2)
+    return (x * emb_cos) + (y * emb_sin)
+
 
 class VJEPARopeAttention(nn.Module):
     def __init__(self, cfg):
@@ -356,10 +386,16 @@ class VJEPARopeAttention(nn.Module):
         return frame_ids, height_ids, width_ids
 
     def apply_rotary_embeddings(self, qk, pos_ids):
+
         # qk: [batch, pos, head, d_head]
         d_mask, h_mask, w_mask = pos_ids
+
+        if d_mask.dim() == 1:
+            d_mask = d_mask.unsqueeze(0).unsqueeze(-1)
+            h_mask = h_mask.unsqueeze(0).unsqueeze(-1)
+            w_mask = w_mask.unsqueeze(0).unsqueeze(-1)
+
         s = 0
-        from vit_prisma.prisma_tools import rotate_queries_or_keys
         qkd = rotate_queries_or_keys(qk[..., s : s + self.d_dim], pos=d_mask)
         s += self.d_dim
         qkh = rotate_queries_or_keys(qk[..., s : s + self.h_dim], pos=h_mask)

@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from jaxtyping import Float
 from vit_prisma.configs.HookedViTConfig import HookedViTConfig
-from vit_prisma.models.layers.attention import Attention
+from vit_prisma.models.layers.attention import Attention, VJEPARopeAttention
 from vit_prisma.models.layers.layer_norm import LayerNorm, LayerNormPre
 from vit_prisma.models.layers.mlp import MLP
 from vit_prisma.prisma_tools.hook_point import HookPoint
@@ -55,7 +55,10 @@ class TransformerBlock(nn.Module):
         else:
             raise ValueError(f"Invalid normalization type: {self.cfg.normalization_type}")
         
-        self.attn  = Attention(self.cfg)
+        if hasattr(self.cfg, "use_rope") and self.cfg.use_rope:
+            self.attn = VJEPARopeAttention(self.cfg)
+        else:
+            self.attn  = Attention(self.cfg)
 
         if not self.cfg.attn_only:
             self.mlp = MLP(self.cfg)

@@ -592,6 +592,8 @@ VJEPA_CONFIGS = {
     "facebook/vjepa2-vitl-fpc64-256": {
         'num_frames': 16,
         'use_position_embeddings': False,
+        'use_rope': True,
+        'use_cls_token': False,
 
         # "use_cls_token": False,
         # "layer_norm_pre": False,

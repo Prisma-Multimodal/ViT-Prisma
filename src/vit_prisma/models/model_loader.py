@@ -271,7 +271,6 @@ def load_weights(
     converted_weights = convert_weights(
         original_weights, model_name, category, config, model_type
     )
-
     # Apply weights to model
     full_state_dict = fill_missing_keys(model, converted_weights)
 
@@ -287,7 +286,7 @@ def load_hooked_model(
     pretrained: bool = True,
     fold_ln: bool = False,
     center_writing_weights: bool = False,
-    fold_value_biases: bool = True,
+    fold_value_biases: bool = False,
     refactor_factored_attn_matrices: bool = False,
     move_to_device: bool = True,
     use_attn_result: bool = False,
@@ -360,6 +359,9 @@ def load_hooked_model(
         fold_value_biases=fold_value_biases,
         refactor_factored_attn_matrices=refactor_factored_attn_matrices,
     )
+
+    print("🔍 3. Post-load b_V first 10 entries (should NOT be zero):", model.state_dict()["blocks.23.attn.b_V"].flatten()[:10])
+
 
     model.to(device=device, dtype=dtype)
     model.set_use_attn_result(use_attn_result)
@@ -670,9 +672,10 @@ def fill_missing_keys(model, state_dict):
     # Get missing keys
     missing_keys = set(default_state_dict.keys()) - set(state_dict.keys())
 
+
     if missing_keys:
         logging.info(
-            f"Filling in {len(missing_keys)} missing keys with default initialization"
+            f"Missing keys: {missing_keys}. Filling in {len(missing_keys)} missing keys with default initialization"
         )
 
     for key in missing_keys:
