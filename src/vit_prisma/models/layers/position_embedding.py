@@ -21,7 +21,7 @@ class PosEmbedding(nn.Module):
 
         num_patches = (self.cfg.image_size // self.cfg.patch_size)**2
         if self.cfg.is_video_transformer:
-            num_patches = num_patches*(self.cfg.video_num_frames//self.cfg.video_tubelet_depth)
+            num_patches = self.num_patches_video(cfg)
             
         token_length = num_patches + 1 if self.cfg.use_cls_token else num_patches
 
@@ -36,4 +36,13 @@ class PosEmbedding(nn.Module):
         pos_embed = self.W_pos
         batch_pos_embed = einops.repeat(pos_embed, "pos d_model -> batch pos d_model", batch=tokens.size(0))
         return batch_pos_embed
+    
+    @staticmethod
+    def num_patches_video(config):
+        return (
+            (config.frames_per_clip // config.tubelet_size)
+            * (config.crop_size // config.patch_size)
+            * (config.crop_size // config.patch_size)
+        )
+
 

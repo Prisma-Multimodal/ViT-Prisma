@@ -93,11 +93,11 @@ class HookedViT(HookedTransformer):
             self.embed = PatchEmbedding(self.cfg)
 
         self.hook_embed = HookPoint()
-
-        # Position embeddings
-        self.pos_embed = PosEmbedding(self.cfg)
-        self.hook_pos_embed = HookPoint()
-
+        
+        if getattr(self.cfg, "positional_embedding_type", False):  # or False
+            self.pos_embed = PosEmbedding(self.cfg)
+            self.hook_pos_embed = HookPoint()
+            
         self.hook_full_embed = HookPoint()
 
         if self.cfg.layer_norm_pre:  # Put layernorm after attn/mlp layers, not before
@@ -174,9 +174,14 @@ class HookedViT(HookedTransformer):
             )  # CLS token for each item in the batch
             embed = torch.cat((cls_tokens, embed), dim=1)  # Add to embedding
 
-        pos_embed = self.hook_pos_embed(self.pos_embed(input))
 
-        residual = embed + pos_embed
+        if getattr(self.cfg, "use_position_embeddings", True):  # or False
+            self.pos_embed = PosEmbedding(self.cfg)
+            self.hook_pos_embed = HookPoint()
+            pos_embed = self.hook_pos_embed(self.pos_embed(input))
+            residual = embed + pos_embed
+        else:
+            residual = embed
 
         self.hook_full_embed(residual)
 

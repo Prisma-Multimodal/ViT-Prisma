@@ -39,7 +39,9 @@ class TubeletEmbedding(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        tubelet_size = [self.cfg.video_tubelet_depth, self.cfg.patch_size, self.cfg.patch_size]
+
+        print(cfg)
+        tubelet_size = [self.cfg.tubelet_size, self.cfg.patch_size, self.cfg.patch_size]
         self.proj = nn.Conv3d(
             self.cfg.n_channels, 
             self.cfg.d_model, 
@@ -51,7 +53,8 @@ class TubeletEmbedding(nn.Module):
     def forward(self, x:Float[torch.Tensor, "batch num_frames channels height width"]) -> Float[torch.Tensor, "batch n_tokens d_model"]:
         
         # Flip num_frames and channels
-        # x = einops.rearrange(x, "b t c h w -> b c t h w")
+        x = einops.rearrange(x, "b t c h w -> b c t h w")
+        print("X SHAPE", x.shape)
         
         x = self.proj(x)
 

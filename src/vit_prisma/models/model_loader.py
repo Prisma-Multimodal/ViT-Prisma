@@ -196,6 +196,9 @@ def load_config(
     elif category in [ModelCategory.CLIP, ModelCategory.VIVIT]:
         old_config = _get_general_hf_config(model_name, model_type)
         new_config = _create_config_from_hf(old_config, model_name, model_type)
+    else:
+        old_config = _get_general_hf_config(model_name, model_type=None)
+        new_config = _create_config_from_hf(old_config, model_name, model_type=None)
 
     # Apply registry overrides
     registry_overrides = MODEL_CONFIGS[model_type].get(model_name, {})
@@ -460,19 +463,22 @@ def _create_config_from_hf(hf_config, model_name: str, model_type: ModelType):
         config.n_layers = hf_config.num_hidden_layers
         config.n_heads = hf_config.num_attention_heads
         config.d_head = hf_config.hidden_size // hf_config.num_attention_heads
-        config.d_mlp = hf_config.intermediate_size
+        config.d_mlp = hf_config.intermediate_size if hasattr(hf_config, 'intermediate_size') else hf_config.hidden_size * 4
+
 
         # Vision-specific parameters
         config.image_size = getattr(hf_config, "image_size", 224)
         config.n_channels = getattr(hf_config, "num_channels", 3)
         config.patch_size = getattr(hf_config, "patch_size", 16)
+        config.crop_size = getattr(hf_config, "crop_size", None)
 
         # Handle different types of patch sizes
         if hasattr(hf_config, "tubelet_size"):
-            config.patch_size = hf_config.tubelet_size[1]
+            config.patch_size = hf_config.patch_size if isinstance(hf_config.patch_size, int) else hf_config.tubelet_size[1]
             config.is_video_transformer = True
-            config.video_tubelet_depth = hf_config.tubelet_size[0]
-            config.video_num_frames = hf_config.video_size[0]
+            config.tubelet_size = hf_config.tubelet_size if isinstance(hf_config.tubelet_size, int) else hf_config.tubelet_size[0] 
+            config.video_num_frames = hf_config.video_size[0] if hasattr(hf_config, "video_size") else None
+            config.frames_per_clip = hf_config.frames_per_clip if hasattr(hf_config, "frames_per_clip") else None
 
     elif model_type == ModelType.TEXT:  # TEXT
         config = HookedTextTransformerConfig()
@@ -481,7 +487,7 @@ def _create_config_from_hf(hf_config, model_name: str, model_type: ModelType):
         config.n_heads = hf_config.num_attention_heads
         config.d_head = hf_config.hidden_size // hf_config.num_attention_heads
         config.d_mlp = hf_config.intermediate_size
-        config.vocab_size = hf_config.vocab_size
+        config.vocab_size = hf_config.vocab_size 
         config.context_length = getattr(hf_config, "max_position_embeddings", 77)
 
     # Common parameters
@@ -501,66 +507,6 @@ def _create_config_from_hf(hf_config, model_name: str, model_type: ModelType):
         config.return_type = "pre_logits"
 
     return config
-
-
-# def _create_clip_config_from_hf(hf_config, model_name: str, model_type: ModelType):
-#     """Create Prisma config from HuggingFace config."""
-#     if model_type == ModelType.VISION:
-#         config = HookedViTConfig()
-
-#         # Extract patch size
-#         if hasattr(hf_config, "patch_size"):
-#             config.patch_size = hf_config.patch_size
-#         elif hasattr(hf_config, "tubelet_size"):
-#             config.patch_size = hf_config.tubelet_size[1]
-
-#         # Common attributes
-#         config.d_model = hf_config.vision_config.hidden_size
-#         config.n_layers = hf_config.vision_config.num_hidden_layers
-#         config.n_heads = hf_config.vision_config.num_attention_heads
-#         config.d_head = hf_config.vision_config.hidden_size // hf_config.vision_config.num_attention_heads
-#         config.d_mlp = hf_config.vision_config.intermediate_size
-#         config.image_size = getattr(hf_config, "image_size", 224)
-#         config.n_channels = getattr(hf_config, "num_channels", 3)
-#         config.patch_size = getattr(hf_config, "patch_size", 16)
-#         config.initializer_range = getattr(hf_config, "initializer_range", 0.02)
-
-#         config.model_name = model_name
-
-#         if hasattr(hf_config, "layer_norm_eps"):
-#             config.eps = hf_config.layer_norm_eps
-
-
-#         # Set output dimension appropriately
-#         if hasattr(hf_config, "projection_dim"):
-#             config.n_classes = hf_config.projection_dim
-#             config.return_type = "class_logits"
-#         elif hasattr(hf_config, "num_classes"):
-#             config.n_classes = hf_config.num_classes
-#             config.return_type = "class_logits"
-#         else:
-#             config.n_classes = config.d_model
-#             config.return_type = "pre_logits"
-
-
-#         # Video-specific settings
-#         if hasattr(hf_config, "tubelet_size"):
-#             config.is_video_transformer = True
-#             config.video_tubelet_depth = hf_config.tubelet_size[0]
-#             config.video_num_frames = hf_config.video_size[0]
-
-#     else:  # TEXT
-#         config = HookedTextTransformerConfig()
-#         config.d_model = hf_config.hidden_size
-#         config.n_layers = hf_config.num_hidden_layers
-#         config.n_heads = hf_config.num_attention_heads
-#         config.d_head = hf_config.hidden_size // hf_config.num_attention_heads
-#         config.d_mlp = hf_config.intermediate_size
-#         config.vocab_size = hf_config.vocab_size
-#         config.context_length = getattr(hf_config, "max_position_embeddings", 77)
-#         config.eps = hf_config.layer_norm_eps
-
-#     return config
 
 
 def create_config_object(model_name: str, model_type: ModelType) -> ConfigType:
@@ -826,19 +772,8 @@ def _load_vivit_weights(model_name, dtype, **kwargs):
 
 def _load_vjepa_weights(model_name, **kwargs):
     """Load weights from a VJEPA model."""
-    try:
-        from vit_prisma.vjepa_hf.modeling_vjepa import VJEPAModel
-        import yaml
-        from importlib import resources
-    except ImportError:
-        raise ImportError(
-            "VJEPA modules not found. Make sure vit_prisma.vjepa_hf is available."
-        )
-
-    with resources.open_text("vit_prisma.vjepa_hf", "paths_cw.yaml") as f:
-        model_paths = yaml.safe_load(f)
-    model_path = model_paths[model_name]["loc"]
-    model = VJEPAModel.from_pretrained(model_path)
+    from transformers import AutoModel
+    model = AutoModel.from_pretrained(model_name)
     return model.state_dict()
 
 

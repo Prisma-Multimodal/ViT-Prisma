@@ -279,3 +279,178 @@ class Attention(nn.Module):
             )
         )
         return z
+
+
+# import torch
+# import torch.nn as nn
+# import einops
+# from typing import Optional, Tuple, Union
+
+class VJEPARopeAttention(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.cfg = cfg
+
+        # Set dimensions
+        self.n_heads = cfg.n_heads
+        self.d_model = cfg.d_model
+        self.d_head = cfg.d_head
+        self.dtype = cfg.dtype
+
+        # Factorized QKV weights and biases (same naming as Prisma Attention)
+        self.W_Q = nn.Parameter(torch.empty(self.n_heads, self.d_model, self.d_head, dtype=self.dtype))
+        self.W_K = nn.Parameter(torch.empty(self.n_heads, self.d_model, self.d_head, dtype=self.dtype))
+        self.W_V = nn.Parameter(torch.empty(self.n_heads, self.d_model, self.d_head, dtype=self.dtype))
+        self.W_O = nn.Parameter(torch.empty(self.n_heads, self.d_head, self.d_model, dtype=self.dtype))
+
+        self.b_Q = nn.Parameter(torch.zeros(self.n_heads, self.d_head, dtype=self.dtype))
+        self.b_K = nn.Parameter(torch.zeros(self.n_heads, self.d_head, dtype=self.dtype))
+        self.b_V = nn.Parameter(torch.zeros(self.n_heads, self.d_head, dtype=self.dtype))
+        self.b_O = nn.Parameter(torch.zeros(self.d_model, dtype=self.dtype))
+
+        # Hook points (from Prisma Attention)
+        self.hook_q = HookPoint()
+        self.hook_k = HookPoint()
+        self.hook_v = HookPoint()
+        self.hook_z = HookPoint()
+        self.hook_attn_scores = HookPoint()
+        self.hook_pattern = HookPoint()
+        self.hook_result = HookPoint()
+
+        # Rotary embedding params — assuming same grid and spatial structure as VJEPA
+        self.grid_size = cfg.crop_size // cfg.patch_size
+        self.grid_depth = cfg.frames_per_clip // cfg.tubelet_size
+
+        # Calculate attention head size for rotary split:
+        # Here d_head = total dimension per head, split into 3 dims for D, H, W.
+        self.d_dim = 2 * ((self.d_head // 3) // 2)
+        self.h_dim = 2 * ((self.d_head // 3) // 2)
+        self.w_dim = 2 * ((self.d_head // 3) // 2)
+
+        self.scaling = self.d_head ** -0.5
+        self.is_causal = False
+
+    def _get_frame_pos(self, ids):
+        tokens_per_frame = self.grid_size * self.grid_size
+        return ids // tokens_per_frame
+
+    def _get_height_pos(self, ids):
+        tokens_per_frame = self.grid_size * self.grid_size
+        frame_ids = self._get_frame_pos(ids)
+        ids = ids - tokens_per_frame * frame_ids
+        tokens_per_row = self.grid_size
+        return ids // tokens_per_row
+
+    def get_position_ids(self, x, masks=None):
+        device = x.device
+        token_size = x.size(1)
+        if masks is not None:
+            ids = masks.unsqueeze(1).repeat(1, self.n_heads, 1)
+        else:
+            ids = torch.arange(token_size, device=device)
+        frame_ids = self._get_frame_pos(ids)
+        height_ids = self._get_height_pos(ids)
+        tokens_per_frame = self.grid_size * self.grid_size
+        tokens_per_row = self.grid_size
+        width_ids = (ids - tokens_per_frame * frame_ids) - tokens_per_row * height_ids
+        return frame_ids, height_ids, width_ids
+
+    def apply_rotary_embeddings(self, qk, pos_ids):
+        # qk: [batch, pos, head, d_head]
+        d_mask, h_mask, w_mask = pos_ids
+        s = 0
+        from vit_prisma.prisma_tools import rotate_queries_or_keys
+        qkd = rotate_queries_or_keys(qk[..., s : s + self.d_dim], pos=d_mask)
+        s += self.d_dim
+        qkh = rotate_queries_or_keys(qk[..., s : s + self.h_dim], pos=h_mask)
+        s += self.h_dim
+        qkw = rotate_queries_or_keys(qk[..., s : s + self.w_dim], pos=w_mask)
+        s += self.w_dim
+        if s < self.d_head:
+            qkr = qk[..., s:]
+            qk = torch.cat([qkd, qkh, qkw, qkr], dim=-1)
+        else:
+            qk = torch.cat([qkd, qkh, qkw], dim=-1)
+        return qk
+
+    def forward(
+        self,
+        query_input: Union[torch.Tensor, Float[torch.Tensor, "batch pos d_model"]],
+        key_input: Union[torch.Tensor, Float[torch.Tensor, "batch pos d_model"]],
+        value_input: Union[torch.Tensor, Float[torch.Tensor, "batch pos d_model"]],
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        query_input, key_input, value_input shape: [batch, pos, d_model]
+        returns: [batch, pos, d_model]
+        """
+
+        # Calculate Q, K, V with einsum
+        q = self.hook_q(
+            einsum(
+                "batch pos d_model, head_index d_model d_head -> batch pos head_index d_head",
+                query_input,
+                self.W_Q,
+            )
+            + self.b_Q
+        )
+        k = self.hook_k(
+            einsum(
+                "batch pos d_model, head_index d_model d_head -> batch pos head_index d_head",
+                key_input,
+                self.W_K,
+            )
+            + self.b_K
+        )
+        v = self.hook_v(
+            einsum(
+                "batch pos d_model, head_index d_model d_head -> batch pos head_index d_head",
+                value_input,
+                self.W_V,
+            )
+            + self.b_V
+        )
+
+        # Rotary embeddings expect Q,K in shape [batch, pos, head, d_head]
+        # Compute positional IDs (frame, height, width)
+        pos_ids = self.get_position_ids(query_input)
+        q = self.apply_rotary_embeddings(q, pos_ids)
+        k = self.apply_rotary_embeddings(k, pos_ids)
+
+        # Attention scores: QK^T
+        attn_scores = einsum(
+            "batch query_pos head_index d_head, batch key_pos head_index d_head -> batch head_index query_pos key_pos",
+            q,
+            k,
+        )
+        attn_scores = attn_scores * self.scaling
+        if attention_mask is not None:
+            attn_scores = attn_scores + attention_mask
+        attn_scores = self.hook_attn_scores(attn_scores)
+
+        # Softmax to get attention pattern
+        pattern = torch.softmax(attn_scores, dim=-1)
+        pattern = torch.where(torch.isnan(pattern), torch.zeros_like(pattern), pattern)
+        pattern = self.hook_pattern(pattern)
+
+        # Calculate z = pattern @ V
+        z = self.hook_z(
+            einsum(
+                "batch key_pos head_index d_head, batch head_index query_pos key_pos -> batch query_pos head_index d_head",
+                v,
+                pattern,
+            )
+        )
+
+        # Output projection with W_O and bias
+        result = self.hook_result(
+            einsum(
+                "batch query_pos head_index d_head, head_index d_head d_model -> batch query_pos head_index d_model",
+                z,
+                self.W_O,
+            )
+        )
+        # Sum over heads + add bias
+        out = einops.reduce(result, "batch pos head_index d_model -> batch pos d_model", "sum") + self.b_O
+
+        return out
