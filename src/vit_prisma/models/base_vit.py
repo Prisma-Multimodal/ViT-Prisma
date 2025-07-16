@@ -166,13 +166,13 @@ class HookedViT(HookedTransformer):
 
         batch_size = input.shape[0]
 
-        embed = self.hook_embed(self.embed(input))
+        embed = self.embed(input)
 
         if self.cfg.use_cls_token:
-            cls_tokens = self.cls_token.expand(
-                batch_size, -1, -1
-            )  # CLS token for each item in the batch
-            embed = torch.cat((cls_tokens, embed), dim=1)  # Add to embedding
+            cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # CLS token for each item in the batch
+            embed = self.hook_embed(torch.cat((cls_tokens, embed), dim=1))  # Add to embedding
+        else:
+            embed = self.hook_embed(embed)
 
         pos_embed = self.hook_pos_embed(self.pos_embed(input))
 
