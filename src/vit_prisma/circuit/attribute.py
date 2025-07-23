@@ -61,8 +61,8 @@ def get_scores_exact_optimized(model: HookedTransformer, graph: Graph, dataloade
     num_samples = 0
     dataloader = dataloader if quiet else tqdm(dataloader)
     for clean, corrupted, label in dataloader:
-        clean = torch.stack(clean).to(device)
-        corrupted = torch.stack(corrupted).to(device)
+        clean = clean.to(device)
+        corrupted = corrupted.to(device)
         graph.in_graph |= graph.real_edge_mask  # All edges that are real are now in the graph
         baseline = evaluate_baseline_per_sample(model, clean, corrupted, label, metric, device=device).mean().item()
         edges = graph.edges.values()
@@ -98,8 +98,8 @@ def get_scores_exact_optimized_parallel(model: HookedTransformer, graph: Graph, 
     """
     dataloader = dataloader if quiet else tqdm(dataloader)
     for clean, corrupted, label in dataloader:
-        clean = torch.stack(clean).to(device)
-        corrupted = torch.stack(corrupted).to(device)
+        clean = clean.to(device)
+        corrupted = corrupted.to(device)
         graph.in_graph |= graph.real_edge_mask  # All edges that are real are now in the graph
         baseline = evaluate_baseline_per_sample(model, clean, corrupted, label, metric, device=device).mean().item()
         edges = graph.edges.values()
@@ -236,9 +236,9 @@ def get_scores_eap_ig(model: HookedTransformer, graph: Graph, dataloader: DataLo
         total_items += batch_size
         labels.extend([this_label[0].item() if isinstance(this_label[0], torch.Tensor) else this_label[0] for this_label in label])
 
-        clean_images = torch.stack(clean).to(device)
+        clean_images = clean.to(device)
         if corrupted[0] is not None:
-            corrupted_images = torch.stack(corrupted).to(device)
+            corrupted_images = corrupted.to(device)
 
         # Here, we get our fwd / bwd hooks and the activation difference matrix
         # The forward corrupted hooks add the corrupted activations to the activation difference matrix
@@ -334,9 +334,9 @@ def get_scores_ig_activations(model: HookedTransformer, graph: Graph, dataloader
         total_items += batch_size
         labels.extend([this_label[0].item() if isinstance(this_label[0], torch.Tensor) else this_label[0] for this_label in label])
 
-        clean_images = torch.stack(clean).to(device)
+        clean_images = clean.to(device)
         if corrupted[0] is not None:
-            corrupted_images = torch.stack(corrupted).to(device)
+            corrupted_images = corrupted.to(device)
 
         (_, _, bwd_hooks), activation_difference = make_hooks_and_matrices(model, graph, total_items - batch_size, batch_size, (model.cfg.image_size // model.cfg.patch_size)**2+1, scores, per_example_scores=per_example_scores)
         (fwd_hooks_corrupted, _, _), activations_corrupted = make_hooks_and_matrices(model, graph, total_items - batch_size, batch_size, (model.cfg.image_size // model.cfg.patch_size)**2+1,
@@ -420,8 +420,8 @@ def get_scores_clean_corrupted(model: HookedTransformer, graph: Graph, dataloade
     for clean, corrupted, label in dataloader:
         batch_size = len(clean)
         total_items += batch_size
-        clean_images = torch.stack(clean).to(device)
-        corrupted_images = torch.stack(corrupted).to(device)
+        clean_images = clean.to(device)
+        corrupted_images = corrupted.to(device)
 
         (fwd_hooks_corrupted, fwd_hooks_clean, bwd_hooks), activation_difference = make_hooks_and_matrices(model, graph, total_items - batch_size,
                                                                                                            batch_size,
@@ -554,7 +554,7 @@ def get_scores_information_flow_routes(model: HookedTransformer, graph: Graph, d
     for clean, _, _ in dataloader:
         batch_size = len(clean)
         total_items += batch_size
-        clean_images = torch.stack(clean).to(device)
+        clean_images = clean.to(device)
         input_lengths = torch.tensor([(model.cfg.image_size // model.cfg.patch_size)**2+1 for i in range(len(clean_images))]).to(device)
 
         hooks = make_hooks((model.cfg.image_size // model.cfg.patch_size)**2+1, input_lengths)

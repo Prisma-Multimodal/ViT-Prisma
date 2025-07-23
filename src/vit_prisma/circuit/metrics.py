@@ -181,7 +181,7 @@ def logit_diff(circuit_logits: torch.Tensor, clean_logits: torch.Tensor, labels:
                loss=False):
     circuit_outputs = torch.softmax(circuit_logits, dim=-1) if prob else circuit_logits
     # good_bad = torch.gather(circuit_outputs, -1, labels.to(circuit_outputs.device))
-    labels = torch.tensor(labels, dtype=torch.long, device=circuit_outputs.device)
+    labels = torch.stack(labels).T.to(circuit_outputs.device)
     good_bad = torch.gather(circuit_outputs, -1, labels)
     results = good_bad[:, 0] - good_bad[:, 1]
     if loss:

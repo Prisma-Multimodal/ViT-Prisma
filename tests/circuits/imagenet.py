@@ -1,3 +1,4 @@
+import os
 import random
 
 import numpy as np
@@ -104,6 +105,8 @@ model.cfg.use_split_qkv_input = True
 model.cfg.use_attn_result = True
 model.cfg.use_hook_mlp_in = True
 model.cfg.ungroup_grouped_query_attention = True
+model.cfg.device = 'cuda'
+setattr(model.cfg, "use_normalization_before_and_after", False)
 model.to('cuda')
 
 class_ranges = [208, 212, 263, 189, 245]
@@ -116,20 +119,23 @@ val_dataset = ImageNetDataset(root_dir=f'/home/yxpengcs/Datasets/imagenet/val',
                                       processor=AutoImageProcessor.from_pretrained("google/vit-base-patch16-224"),
                                       select_class=class_ranges, ctft_class_ranges=ctft_class_ranges)
 
-train_dataloader = DataLoader(train_dataset, batch_size=64, num_workers=4)
-val_dataloader = DataLoader(val_dataset, batch_size=64, num_workers=4)
+train_dataloader = DataLoader(train_dataset, batch_size=10, num_workers=4)
+val_dataloader = DataLoader(val_dataset, batch_size=10, num_workers=4)
 
 analyzer = CircuitAnalyzer(
     model=model,
-    task="waterbirds",
-    method="EAP",
+    task="imagenet",
+    method="EAP-IG-inputs",
     metric_name="logit_diff",
     level="edge",
     ablation="patching"
 )
 
 graph, perexample_scores = analyzer.run_analysis(train_dataloader)
-eval_results = analyzer.run_evaluation(val_dataloader)
+eval_results = analyzer.run_evaluation(val_dataloader, absolute=False)
 
 # Unpack results
 weighted_edge_counts, percentages, auc, auc_from_1, avg_faithfulness, faithfulnesses = eval_results
+
+print(f'auc is {auc}')
+print(f'auc from 1 is {auc_from_1}')

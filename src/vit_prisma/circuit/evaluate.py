@@ -1,3 +1,4 @@
+import math
 import os
 import pickle
 from typing import Callable, List, Union, Literal, Optional
@@ -220,9 +221,9 @@ def evaluate_graph(model: HookedViT, graph: Graph, dataloader: DataLoader,
     # and here we actually run / evaluate the model
     dataloader = dataloader if quiet else tqdm(dataloader)
     for clean, corrupted, label in dataloader:
-        clean_images = torch.stack(clean).to(device)
+        clean_images = clean.to(device)
         if corrupted[0] is not None:
-            corrupted_images = torch.stack(corrupted).to(device)
+            corrupted_images = corrupted.to(device)
 
         # fwd_hooks_corrupted adds in corrupted acts to activation_difference
         # fwd_hooks_clean subtracts out clean acts from activation_difference
@@ -528,9 +529,9 @@ def evaluate_baseline(model: HookedViT, dataloader: DataLoader, metrics: List[Ca
     if not quiet:
         dataloader = tqdm(dataloader)
     for clean, corrupted, label in dataloader:
-        clean_images = torch.stack(clean).to(device)
+        clean_images = clean.to(device)
         if corrupted[0] is not None:
-            corrupted_images = torch.stack(corrupted).to(device)
+            corrupted_images = corrupted.to(device)
         with torch.inference_mode():
             if corrupted[0] is not None:
                 corrupted_logits = model(corrupted_images)
