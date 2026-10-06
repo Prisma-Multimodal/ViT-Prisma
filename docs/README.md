@@ -27,13 +27,24 @@ We also include a suite of [open source SAEs for all layers of CLIP and DINO](ht
 
 # Installation
 
-We recommend installing from source:
+Python 3.10 or newer is required. We recommend installing from source in a virtual environment:
 
 ```
 git clone https://github.com/soniajoseph/ViT-Prisma
 cd ViT-Prisma
 pip install -e .
 ```
+
+For an offline CPU example that generates data, trains a tiny ViT, patches
+activations, and saves results locally, run:
+
+```sh
+prisma-cpu-quickstart --output-dir results/cpu-quickstart
+```
+
+See the [CPU quickstart](CPUQuickstart.md) for CPU-only installation, run budgets,
+outputs, and tests. Plotting and tracking are optional: install `.[visualization]`
+or `.[tracking]` as needed, or `.[all]` for both. Contributors can install `.[test]`.
 
 # Models Supported
 We support most vision/video transformers loaded from OpenCLIP and Huggingface, including ViTs, CLIP, DINO, and JEPA, with a few exceptions (e.g. if the architecture is substantially different).

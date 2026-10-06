@@ -1,4 +1,9 @@
-import wandb
+try:
+    import wandb
+except ModuleNotFoundError as error:
+    if error.name != "wandb":
+        raise
+    wandb = None
 import torch
 import torch.optim as optim
 import tqdm
@@ -30,6 +35,11 @@ def train(
     callbacks: list[PrismaCallback] = None,
 ):
     if config.use_wandb:
+        if wandb is None:
+            raise ImportError(
+                "Tracking requires pip install 'vit-prisma[tracking]'; "
+                "set config.use_wandb=False to train without tracking."
+            )
         if config.wandb_team_name is None:
             wandb.init(project=config.wandb_project_name)
         else:
