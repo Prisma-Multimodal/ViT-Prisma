@@ -15,7 +15,8 @@ from vit_prisma.training.schedulers import WarmupThenStepLR, WarmupCosineAnneali
 from vit_prisma.training.early_stopping import EarlyStopping
 from vit_prisma.utils.saving_utils import save_config_to_file
 import os
-from torch.utils.data import Dataset, DataLoader
+import json
+from torch.utils.data import Dataset, DataLoader, Subset
 import dataclasses
 from sklearn.model_selection import train_test_split
 
@@ -28,12 +29,6 @@ def train(
     checkpoint_path=None,
     callbacks: list[PrismaCallback] = None,
 ):
-    if val_dataset is None:
-        train_dataset, val_dataset = train_test_split(train_dataset, test_size=0.2)
-        print(
-            f"Split train dataset into train and val with {len(train_dataset)} and {len(val_dataset)}."
-        )
-
     if config.use_wandb:
         if config.wandb_team_name is None:
             wandb.init(project=config.wandb_project_name)
@@ -43,10 +38,31 @@ def train(
         update_dataclass_from_dict(config, sweep_values)
         wandb.config.update(dataclass_to_dict(config))
 
+    # Apply sweep overrides before seeding and choosing the validation split.
+    seed = config.seed if config.seed is not None else 666
+    set_seed(seed)
+    if val_dataset is None:
+        source_size = len(train_dataset)
+        train_indices, val_indices = train_test_split(
+            list(range(source_size)), test_size=0.2, random_state=seed
+        )
+        train_dataset, val_dataset = (
+            Subset(train_dataset, train_indices), Subset(train_dataset, val_indices)
+        )
+        os.makedirs(config.parent_dir or ".", exist_ok=True)
+        with open(os.path.join(config.parent_dir, "train_val_split.json"), "w") as handle:
+            json.dump({
+                "seed": seed, "test_size": 0.2, "source_size": source_size,
+                "train_indices": train_indices, "val_indices": val_indices,
+            }, handle, indent=2)
+            handle.write("\n")
+        print(
+            f"Split train dataset into train and val with {len(train_dataset)} and {len(val_dataset)}."
+        )
+
     print("Config is:", config)
     save_config_to_file(config, os.path.join(config.parent_dir, "config.json"))
 
-    set_seed(config.seed if config.seed != None else 666)
     model = model_function(config)
     model.train()
     model.to(config.device)
