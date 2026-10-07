@@ -63,6 +63,10 @@ timm_model = PretrainedModel('vit_base_patch32_224', config, is_timm=True)
 
 The framework also has a few datasets that can be synthetically generated, and cached. 
 
+See [reproducible dataset generation](dataset_descriptions/Induction.md#reproducible-generation-and-caching)
+for explicit seeds, cache directories, and saved split manifests for induction
+and circle datasets.
+
 Below are the datasets available as part of the framework: 
  - Circle
  - [dsprites](https://github.com/google-deepmind/dsprites-dataset)
@@ -128,5 +132,4 @@ The trainer has support for callbacks, that allows you to pass methods that can 
 
  trainer.train(model_function, config, train_dataset, callbacks=[DemoCallback()])
  ```
-
 

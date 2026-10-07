@@ -1,21 +1,16 @@
-import torch
-import torch.nn as nn
-
-import torch
-from torch.utils.data import Dataset, DataLoader, random_split
 from itertools import combinations
-import torchvision.transforms as transforms
-
-import numpy as np
-
-from PIL import Image, ImageDraw
 import math
-
+from pathlib import Path
 import random
 
-import os
+import numpy as np
+from PIL import Image
+from torch.utils.data import Dataset
+import torchvision.transforms as transforms
 
-from torchvision.transforms.transforms import Grayscale, ToTensor
+from vit_prisma.dataloaders.synthetic_cache import (
+    check_cache_manifest, validate_fraction, validate_seed, write_split_manifest,
+)
 
 def check_if_valid_angle(angle, angle_range):
     if angle < 0 or angle > 360:
@@ -25,20 +20,18 @@ def check_if_valid_angle(angle, angle_range):
     if not np.isin(angle, angle_range):
         raise ValueError('Angle must at correct interval of angle_range')
     
-# def get_datasets(split_ratio, model_type):
-#     circle_metadata = get_circle_metadata()
-#     # Create train and test data once
-#     train_data_raw, test_data_raw = get_train_test_data(circle_metadata, split_ratio) 
-#     train_dataset = CircleDataset(circle_metadata, train_data_raw, train_or_test='train', model_type = model_type)
-#     test_dataset = CircleDataset(circle_metadata, test_data_raw, train_or_test='test', model_type = model_type)
-#     return train_dataset, test_dataset
-
-def get_train_test_data(circle_metadata, split_ratio=0.5):
-    data = list(combinations(range(0, circle_metadata['mod_arith']), 2))
-    random.shuffle(data)
+def get_train_test_data(circle_metadata, split_ratio=0.5, seed=42):
+    """Return disjoint, seeded angle-pair lists; ``split_ratio`` is the train fraction."""
+    validate_seed(seed)
+    validate_fraction(split_ratio, 'split_ratio')
+    data = list(combinations(range(circle_metadata['mod_arith']), 2))
+    random.Random(seed).shuffle(data)
     split_idx = int(len(data) * split_ratio)
+    if not 0 < split_idx < len(data):
+        raise ValueError("split_ratio must leave at least one pair in each split")
     return data[:split_idx], data[split_idx:]
-    
+
+
 def get_circle_metadata():
     circle_metadata = {
     "mod_arith": 60,
@@ -70,14 +63,14 @@ def draw_circle_with_points(angle1=None, angle2=None, metadata=None, model_type=
     for i in transformed_angle_range:
         x = center[0] + radius * math.cos(math.radians(i))
         y = center[1] + radius * math.sin(math.radians(i))
-        pixels[x, y] = 0
+        pixels[int(x), int(y)] = 0
 
     # Specify the angle
     def _draw_point_(angle, color=128):
         angle_rad = math.radians(angle) # x3 b/c representing the circle in intervals of 3
         x = center[0] + radius * math.cos(angle_rad)
         y = center[1] + radius * math.sin(angle_rad)
-        pixels[x, y] = color
+        pixels[int(x), int(y)] = color
 
     if angle1 is not None:
         check_if_valid_angle(angle1, angle_range)
@@ -96,7 +89,7 @@ def draw_circle_with_points(angle1=None, angle2=None, metadata=None, model_type=
         bottom_padding = 224 - 32 - top_padding
 
         transform = transforms.Compose([
-        transforms.Pad((left_padding, top_padding, right_padding, bottom_padding), fill=1),  # Assuming white padding,  # Resize the image to 224x224
+        transforms.Pad((left_padding, top_padding, right_padding, bottom_padding), fill=255),  # White padding on the uint8 PIL image
         transforms.Grayscale(num_output_channels=3),  
         transforms.ToTensor()           # Convert the PIL Image to a tensor
     ])
@@ -112,62 +105,77 @@ def draw_circle_with_points(angle1=None, angle2=None, metadata=None, model_type=
     return img 
 
 class CircleDataset(Dataset):
-    def __init__(self, train_or_test='test', 
-    cache_path = '/home/mila/s/sonia.joseph/ViT-Planetarium/data/circle',
-    transform=None):
+    """Circle addition data with reproducible train/test partitions and disk caching.
 
-        self.cache_path = cache_path
+    ``cache_path`` is a directory. Changing ``seed``, ``split_ratio`` (the train
+    fraction), or ``model_type`` requires a different directory. ``transform``
+    is applied on access and does not alter cached data.
+    """
+
+    def __init__(self, train_or_test='test', cache_path='../data/circle',
+                 transform=None, *, seed=42, split_ratio=0.5, model_type=None):
+        if train_or_test not in ('train', 'test'):
+            raise ValueError("train_or_test must be 'train' or 'test'")
+        validate_seed(seed)
+        validate_fraction(split_ratio, 'split_ratio')
+        if model_type not in (None, 'pretrained_transformer'):
+            raise ValueError("model_type must be None or 'pretrained_transformer'")
+        self.cache_path = Path(cache_path)
         self.train_or_test = train_or_test
+        self.transform = transform
+        self.seed = seed
+        self.split_ratio = split_ratio
+        self.model_type = model_type
+        self.circle_metadata = get_circle_metadata()
+        self.mod_arith = self.circle_metadata['mod_arith']
+        self.cache_config = {
+            'dataset': 'circle', 'version': 1, 'seed': seed,
+            'split_ratio': split_ratio, 'model_type': model_type,
+        }
 
-        # self.circle_metadata = circle_metadata
-        # self.mod_arith = circle_metadata['mod_arith']
-        # self.data = [{'data': item, 'metadata': i} for i, item in enumerate(data)]
-        # self.model_type = model_type
-
-        self.transform=transform
-
-        if os.path.exists(f'{cache_path}/{train_or_test}.npz'):
-            print("Loading circle dataset from cache...", f'{cache_path}/{train_or_test}.npz')
-            self._load_from_cache()
-        else:
-            print("Generating and saving new circle dataset...")
+        if not check_cache_manifest(
+            self.cache_path, self.cache_config, ('train.npz', 'test.npz')
+        ):
             self._generate_and_cache()
+        self._load_from_cache()
 
     def _load_from_cache(self):
-        loaded = np.load(f'{self.cache_path}/{self.train_or_test}.npz', allow_pickle=True)
-        self.imgs = loaded['imgs']
-        self.labels = loaded['labels']
-        self.data_points = loaded['data_points']
+        with np.load(self.cache_path / f'{self.train_or_test}.npz') as loaded:
+            self.imgs = loaded['imgs']
+            self.labels = loaded['labels']
+            self.data_points = loaded['data_points']
 
     def __len__(self):
         return len(self.imgs)
 
     def _generate_and_cache(self):
-        imgs = []
-        labels = []
-        data_points = []
-        
-        for idx in range(len(self.data)):
-            data_point = self.data[idx]['data']
-            label = sum(data_point) % self.mod_arith
-            img = draw_circle_with_points(data_point[0], data_point[1], self.circle_metadata, model_type=self.model_type)
-            
-            imgs.append(img)
-            labels.append(label)
-            data_points.append(data_point)
-
-        self.imgs = np.array(imgs)
-        self.labels = np.array(labels)
-        self.data_points = np.array(data_points)
-
-        # Cache the dataset
-        np.savez(f'{self.cache_path}/{self.train_or_test}.npz', imgs=self.imgs, labels=self.labels, data_points=self.data_points)
+        self.cache_path.mkdir(parents=True, exist_ok=True)
+        train, test = get_train_test_data(
+            self.circle_metadata, self.split_ratio, self.seed
+        )
+        splits = {'train': train, 'test': test}
+        for split, pairs in splits.items():
+            # Preallocate to avoid holding a list of tensors plus a stacked copy.
+            shape = (3, 224, 224) if self.model_type == 'pretrained_transformer' else (1, 32, 32)
+            imgs = np.empty((len(pairs), *shape), dtype=np.float32)
+            for index, (a, b) in enumerate(pairs):
+                imgs[index] = draw_circle_with_points(
+                    a, b, self.circle_metadata, model_type=self.model_type
+                ).numpy()
+            labels = np.array([sum(pair) % self.mod_arith for pair in pairs], dtype=np.int64)
+            np.savez(
+                self.cache_path / f'{split}.npz', imgs=imgs, labels=labels,
+                data_points=np.array(pairs, dtype=np.int64),
+            )
+            del imgs
+        write_split_manifest(
+            self.cache_path, self.cache_config, splits,
+            membership='angle_pairs', source_size=len(train) + len(test),
+        )
 
     def __getitem__(self, idx):
         image = self.imgs[idx]
         label = self.labels[idx]
-        # meta_data = self.metadata[idx]
         if self.transform:
             image = self.transform(image)
         return image, label
-
